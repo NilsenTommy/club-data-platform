@@ -1,0 +1,39 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:18:55Z",
+  "queryTime" : 2.046,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%2814.3844+67.2766%29%29&nearestmaxcount=1&validtime=2025-11-25&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN82290",
+    "name" : "BODØ VI",
+    "shortName" : "Bodø",
+    "country" : "Norge",
+    "countryCode" : "NO",
+    "wmoId" : 1152,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ 14.3826294, 67.2726458 ],
+      "nearest" : false
+    },
+    "distance" : 0.44621749333000005,
+    "masl" : 16,
+    "validFrom" : "1953-01-01T00:00:00.000Z",
+    "county" : "NORDLAND",
+    "countyId" : 18,
+    "municipality" : "BODØ",
+    "municipalityId" : 1804,
+    "ontologyId" : 0,
+    "stationHolders" : [ "AVINOR", "MET.NO" ],
+    "externalIds" : [ "0-20000-0-01152", "10.249.0.100", "157.249.88.80", "ENBO" ],
+    "icaoCodes" : [ "ENBO" ],
+    "wigosId" : "0-20000-0-01152"
+  } ]
+}

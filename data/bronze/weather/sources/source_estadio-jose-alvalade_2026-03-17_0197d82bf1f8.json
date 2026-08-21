@@ -1,0 +1,33 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:18:40Z",
+  "queryTime" : 2.151,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%28-9.1608+38.7612%29%29&nearestmaxcount=1&validtime=2026-03-17&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN857900",
+    "name" : "LISBOA/GAGO COUTINHO",
+    "country" : "Portugal",
+    "countryCode" : "PT",
+    "wmoId" : 8579,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ -9.1275, 38.7661111111111 ],
+      "nearest" : false
+    },
+    "distance" : 2.9383914275799996,
+    "masl" : 104,
+    "validFrom" : "2006-06-12T00:00:00.000Z",
+    "ontologyId" : 0,
+    "stationHolders" : [ ],
+    "externalIds" : [ "0-20000-0-08579", "LPPT" ],
+    "icaoCodes" : [ "LPPT" ]
+  } ]
+}

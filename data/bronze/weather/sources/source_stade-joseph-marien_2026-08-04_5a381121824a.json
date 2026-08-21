@@ -1,0 +1,32 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:18:38Z",
+  "queryTime" : 2.148,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%284.3295+50.8179%29%29&nearestmaxcount=1&validtime=2026-08-04&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN631000",
+    "name" : "VLISSINGEN AWS",
+    "country" : "Nederland",
+    "countryCode" : "NL",
+    "wmoId" : 6310,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ 3.59583333333333, 51.4413888888889 ],
+      "nearest" : false
+    },
+    "distance" : 86.18239501322,
+    "masl" : 8,
+    "validFrom" : "2006-06-12T00:00:00.000Z",
+    "ontologyId" : 0,
+    "stationHolders" : [ "KNMI" ],
+    "externalIds" : [ "0-20000-0-06310" ]
+  } ]
+}

@@ -1,0 +1,32 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:19:02Z",
+  "queryTime" : 1.703,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%2812.4581+41.9388%29%29&nearestmaxcount=1&validtime=2025-04-17&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN776100",
+    "name" : "AJACCIO",
+    "country" : "Frankrike",
+    "countryCode" : "FR",
+    "wmoId" : 7761,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ 8.79277777777778, 41.9180555555556 ],
+      "nearest" : false
+    },
+    "distance" : 303.20652211844003,
+    "masl" : 6,
+    "validFrom" : "2006-06-12T00:00:00.000Z",
+    "ontologyId" : 0,
+    "stationHolders" : [ "MÉTÉO FRANCE" ],
+    "externalIds" : [ "0-20000-0-07761" ]
+  } ]
+}

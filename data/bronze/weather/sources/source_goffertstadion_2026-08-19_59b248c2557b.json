@@ -1,0 +1,32 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:18:34Z",
+  "queryTime" : 1.67,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%285.8372+51.8225%29%29&nearestmaxcount=1&validtime=2026-08-19&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN626000",
+    "name" : "DE BILT AWS",
+    "country" : "Nederland",
+    "countryCode" : "NL",
+    "wmoId" : 6260,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ 5.17972222222222, 52.0988888888889 ],
+      "nearest" : false
+    },
+    "distance" : 54.53384507914,
+    "masl" : 2,
+    "validFrom" : "2006-06-12T00:00:00.000Z",
+    "ontologyId" : 0,
+    "stationHolders" : [ "KNMI" ],
+    "externalIds" : [ "0-20000-0-06260" ]
+  } ]
+}

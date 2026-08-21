@@ -1,0 +1,32 @@
+{
+  "@context" : "https://frost.met.no/schema",
+  "@type" : "SourceResponse",
+  "apiVersion" : "v0",
+  "license" : "https://creativecommons.org/licenses/by/3.0/no/",
+  "createdAt" : "2026-08-21T20:18:52Z",
+  "queryTime" : 2.134,
+  "currentItemCount" : 1,
+  "itemsPerPage" : 1,
+  "offset" : 0,
+  "totalItemCount" : 1,
+  "currentLink" : "https://frost.met.no/sources/v0.jsonld?types=SensorSystem&geometry=nearest%28POINT%287.4519+51.4925%29%29&nearestmaxcount=1&validtime=2025-12-10&elements=air_temperature%2Csum%28precipitation_amount+PT1H%29%2Cwind_speed",
+  "data" : [ {
+    "@type" : "SensorSystem",
+    "id" : "SN629000",
+    "name" : "TWENTE AWS",
+    "country" : "Nederland",
+    "countryCode" : "NL",
+    "wmoId" : 6290,
+    "geometry" : {
+      "@type" : "Point",
+      "coordinates" : [ 6.89083333333333, 52.2730555555556 ],
+      "nearest" : false
+    },
+    "distance" : 94.95308631001,
+    "masl" : 35,
+    "validFrom" : "2006-06-12T00:00:00.000Z",
+    "ontologyId" : 0,
+    "stationHolders" : [ "KNMI" ],
+    "externalIds" : [ "0-20000-0-06290" ]
+  } ]
+}
