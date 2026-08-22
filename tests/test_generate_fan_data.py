@@ -135,6 +135,14 @@ class GenerateFanDataTests(unittest.TestCase):
 		)
 		self.assertTrue((created.loc[first_purchase.index] < first_purchase).all())
 
+	def test_consent_has_deterministic_logical_timestamps(self):
+		created = pd.to_datetime(self.customers["created_at"], utc=True)
+		updated = pd.to_datetime(self.customers["consent_updated_at"], utc=True)
+
+		self.assertFalse(updated.isna().any())
+		self.assertTrue((updated >= created).all())
+		self.assertEqual(set(self.customers["marketing_consent"]), {True, False})
+
 	def test_all_emails_use_reserved_domains(self):
 		domains = set()
 		for frame in (self.customers, self.app_users):

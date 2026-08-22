@@ -28,6 +28,7 @@ TICKET_CUSTOMER_COLUMNS = [
 	"postal_code",
 	"country",
 	"marketing_consent",
+	"consent_updated_at",
 ]
 APP_USER_COLUMNS = [
 	"app_user_id",
@@ -198,6 +199,7 @@ def project_ticket_customers(
 		if profile.Index >= OVERLAP_COUNT and profile.Index % 47 == 0:
 			email = rows[-1]["email"]
 		created_at = earliest_kickoff - pd.Timedelta(days=rng.randint(240, 2200))
+		consent_updated_at = created_at + pd.Timedelta(days=30 + profile.Index % 181)
 		rows.append(
 			{
 				"ticket_customer_id": str(71000000 + profile.Index * 17),
@@ -207,6 +209,7 @@ def project_ticket_customers(
 				"postal_code": None if profile.Index % 31 == 0 else f"{8000 + (profile.Index * 37) % 1999:04d}",
 				"country": None if profile.Index % 97 == 0 else "NO",
 				"marketing_consent": profile.Index % 3 != 0,
+				"consent_updated_at": _timestamp(consent_updated_at),
 			}
 		)
 	return pd.DataFrame(rows, columns=TICKET_CUSTOMER_COLUMNS)
@@ -421,6 +424,12 @@ def validate_datasets(
 	for customer_id, purchase in first_purchase.items():
 		if pd.Timestamp(created_at[customer_id]) >= pd.Timestamp(purchase):
 			raise FanDataError("A customer was created after their first ticket purchase.")
+	consent_updated_at = pd.to_datetime(
+		customers["consent_updated_at"], utc=True, errors="coerce"
+	)
+	customer_created_at = pd.to_datetime(customers["created_at"], utc=True, errors="coerce")
+	if consent_updated_at.isna().any() or (consent_updated_at < customer_created_at).any():
+		raise FanDataError("Consent timestamps must be valid and not precede customer creation.")
 	fragmentation = profiles.loc[
 		profiles["in_ticket_system"] & profiles["in_app"], "fragmentation_type"
 	]

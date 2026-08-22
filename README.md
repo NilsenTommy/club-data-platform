@@ -279,9 +279,14 @@ Generatoren lager 500 underliggende supportere: 425 billettkunder, 375
 appbrukere og 300 personer som finnes i begge systemene. Den interne identiteten
 brukes bare mens dataene genereres og skrives aldri til råfilene.
 
-- `ticket_customers.csv` har billettsystemets kunde-ID, kontaktfelt og samtykke.
+- `ticket_customers.csv` har billettsystemets kunde-ID, kontaktfelt,
+  `marketing_consent` og `consent_updated_at`.
 - `ticket_sales.csv` har billettkjøp knyttet direkte til `match_id` i Silver.
 - `app_users.csv` har appens separate bruker-ID, profilnavn og appinnstillinger.
+
+Samtykket er en syntetisk snapshot-verdi med et logisk hendelsestidspunkt etter
+kundeopprettelse. Appfeltet `push_opt_in` er en kanalpreferanse og tolkes ikke
+som marketing consent.
 
 For overlappende personer inneholder dataene eksakte e-poster, forskjeller i
 store/små bokstaver, ekstra mellomrom, `+alias`, alternative syntetiske adresser
@@ -323,7 +328,12 @@ Med dagens syntetiske Bronze-data blir resultatet:
 Fans:              540 rows, 260 linked across sources
 Fan identities:    800 rows
 Ticket sales:     3771 rows
+Marketing consent: 283 true, 142 false, 115 unknown
+Activation eligible: 278 rows
 ```
+
+Ticketing er autoritativ kilde for `marketing_consent`. App-only og uløste
+appidentiteter får ukjent samtykke, ikke et implisitt avslag.
 
 Supporteranalyse i Gold er fortsatt et senere steg og er ikke implementert.
 
@@ -379,6 +389,12 @@ visningsnavn, første observerte tidspunkt og antall koblede kildesystemer.
 ID-en er en deterministisk hash av ticket-identiteten når den finnes, ellers
 app-identiteten. Nye tidligere-sorterende kilderader endrer dermed ikke
 eksisterende fan-ID-er.
+
+`marketing_consent` og `consent_updated_at` følger ticket-identiteten inn i den
+canonical fanen. `activation_eligible` er en enkel, eksplisitt regel som krever
+både `marketing_consent=True` og en kontaktbar normalisert e-post. Feltet er en
+demonstrasjon av hvordan identitet og samtykke kan kombineres med atferd fra
+`silver_ticket_sales.parquet`; det er ikke en produksjonsklar policy engine.
 
 ### `silver_fan_identities.parquet`
 

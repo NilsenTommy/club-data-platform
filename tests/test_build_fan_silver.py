@@ -12,11 +12,11 @@ class BuildFanSilverTests(unittest.TestCase):
 	def make_customers() -> pd.DataFrame:
 		return pd.DataFrame(
 			[
-				{"ticket_customer_id": "T-100", "email": " ADA@EXAMPLE.COM ", "name": "Ada Berg", "created_at": "2024-01-01T10:00:00Z"},
-				{"ticket_customer_id": "T-200", "email": "bob@example.org", "name": "Bob Dahl", "created_at": "2024-01-02T10:00:00Z"},
-				{"ticket_customer_id": "T-300", "email": "duplicate@example.net", "name": "Cecilie Eide", "created_at": "2024-01-03T10:00:00Z"},
-				{"ticket_customer_id": "T-400", "email": "duplicate@example.net", "name": "Daniel Fjell", "created_at": "2024-01-04T10:00:00Z"},
-				{"ticket_customer_id": "T-500", "email": None, "name": "Eva Gran", "created_at": "2024-01-05T10:00:00Z"},
+				{"ticket_customer_id": "T-100", "email": " ADA@EXAMPLE.COM ", "name": "Ada Berg", "created_at": "2024-01-01T10:00:00Z", "marketing_consent": True, "consent_updated_at": "2024-01-10T10:00:00Z"},
+				{"ticket_customer_id": "T-200", "email": "bob@example.org", "name": "Bob Dahl", "created_at": "2024-01-02T10:00:00Z", "marketing_consent": False, "consent_updated_at": "2024-01-11T10:00:00Z"},
+				{"ticket_customer_id": "T-300", "email": "duplicate@example.net", "name": "Cecilie Eide", "created_at": "2024-01-03T10:00:00Z", "marketing_consent": True, "consent_updated_at": "2024-01-12T10:00:00Z"},
+				{"ticket_customer_id": "T-400", "email": "duplicate@example.net", "name": "Daniel Fjell", "created_at": "2024-01-04T10:00:00Z", "marketing_consent": False, "consent_updated_at": "2024-01-13T10:00:00Z"},
+				{"ticket_customer_id": "T-500", "email": None, "name": "Eva Gran", "created_at": "2024-01-05T10:00:00Z", "marketing_consent": True, "consent_updated_at": "2024-01-14T10:00:00Z"},
 			]
 		)
 
@@ -91,6 +91,9 @@ class BuildFanSilverTests(unittest.TestCase):
 		self.assertEqual(fans["fan_id"].nunique(), 8)
 		self.assertEqual(fans["source_count"].value_counts().to_dict(), {1: 6, 2: 2})
 		self.assertFalse(identities.duplicated(["source", "source_id"]).any())
+		self.assertEqual(str(fans["marketing_consent"].dtype), "boolean")
+		self.assertEqual(str(fans["consent_updated_at"].dtype), "datetime64[ns, UTC]")
+		self.assertEqual(str(fans["activation_eligible"].dtype), "boolean")
 
 	def test_exact_and_alias_emails_link_across_sources(self):
 		_, identities, _ = self.build()
@@ -115,6 +118,18 @@ class BuildFanSilverTests(unittest.TestCase):
 		self.assertEqual(len(duplicate_fans), 3)
 		self.assertNotEqual(lookup[("ticketing", "T-500")], lookup[("app", "A-500")])
 
+	def test_activation_requires_explicit_consent_and_contactable_identity(self):
+		fans, identities, _ = self.build()
+		lookup = identities.set_index(["source", "source_id"])["fan_id"]
+		fans_by_id = fans.set_index("fan_id")
+
+		self.assertTrue(fans_by_id.loc[lookup[("ticketing", "T-100")], "activation_eligible"])
+		self.assertFalse(fans_by_id.loc[lookup[("ticketing", "T-200")], "activation_eligible"])
+		self.assertFalse(fans_by_id.loc[lookup[("ticketing", "T-500")], "activation_eligible"])
+		app_only = fans_by_id.loc[lookup[("app", "A-400")]]
+		self.assertTrue(pd.isna(app_only["marketing_consent"]))
+		self.assertFalse(app_only["activation_eligible"])
+
 	def test_fan_ids_are_stable_when_an_earlier_source_identity_is_added(self):
 		_, before = build_fan_silver.build_fans_and_identities(
 			self.make_customers(), self.make_app_users()
@@ -128,6 +143,8 @@ class BuildFanSilverTests(unittest.TestCase):
 							"email": "new@example.com",
 							"name": "New Fan",
 							"created_at": "2023-01-01T10:00:00Z",
+							"marketing_consent": True,
+							"consent_updated_at": "2023-01-02T10:00:00Z",
 						}
 					]
 				),
@@ -174,6 +191,30 @@ class BuildFanSilverTests(unittest.TestCase):
 		unknown_match.loc[0, "match_id"] = "999"
 		with self.assertRaisesRegex(build_fan_silver.FanSilverBuildError, "unknown match_id"):
 			build_fan_silver.build_ticket_sales(unknown_match, identities, self.make_matches())
+
+	def test_rejects_invalid_or_incomplete_consent(self):
+		for column, value, message in (
+			("marketing_consent", "maybe", "marketing_consent is invalid"),
+			("consent_updated_at", None, "must occur together"),
+			("consent_updated_at", "2023-01-01T10:00:00Z", "precedes customer creation"),
+		):
+			with self.subTest(column=column, value=value):
+				customers = self.make_customers()
+				customers[column] = customers[column].astype("object")
+				customers.loc[0, column] = value
+				with self.assertRaisesRegex(build_fan_silver.FanSilverBuildError, message):
+					build_fan_silver.build_fans_and_identities(
+						customers, self.make_app_users()
+					)
+
+		customers = self.make_customers()
+		customers["marketing_consent"] = customers["marketing_consent"].astype("object")
+		customers.loc[0, "marketing_consent"] = None
+		customers.loc[0, "consent_updated_at"] = "not-a-timestamp"
+		with self.assertRaisesRegex(build_fan_silver.FanSilverBuildError, "consent_updated_at is invalid"):
+			build_fan_silver.build_fans_and_identities(
+				customers, self.make_app_users()
+			)
 
 	def test_rejects_invalid_or_non_finite_quantities_and_prices(self):
 		_, identities = build_fan_silver.build_fans_and_identities(

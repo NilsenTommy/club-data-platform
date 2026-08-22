@@ -19,6 +19,8 @@ TICKET_CUSTOMER_COLUMNS = (
 	"email",
 	"name",
 	"created_at",
+	"marketing_consent",
+	"consent_updated_at",
 )
 APP_USER_COLUMNS = (
 	"app_user_id",
@@ -44,6 +46,9 @@ FAN_COLUMNS = [
 	"display_name",
 	"first_seen_at",
 	"source_count",
+	"marketing_consent",
+	"consent_updated_at",
+	"activation_eligible",
 ]
 FAN_IDENTITY_COLUMNS = [
 	"fan_id",
@@ -140,11 +145,43 @@ def _typed_sources(
 	for frame, email_column in ((tickets, "email"), (apps, "email")):
 		frame["normalized_email"] = frame[email_column].map(normalize_email).astype("string")
 	tickets["created_at"] = pd.to_datetime(tickets["created_at"], utc=True, errors="coerce")
+	consent_values = tickets["marketing_consent"].astype("string").str.strip().str.casefold()
+	invalid_consent = consent_values.notna() & ~consent_values.isin({"true", "false"})
+	if invalid_consent.any():
+		raise FanSilverBuildError("Silver fan validation failed: marketing_consent is invalid.")
+	tickets["marketing_consent"] = consent_values.map(
+		{"true": True, "false": False}
+	).astype("boolean")
+	raw_consent_timestamps = tickets["consent_updated_at"].astype("string").str.strip()
+	raw_timestamp_present = raw_consent_timestamps.notna() & raw_consent_timestamps.ne("")
+	tickets["consent_updated_at"] = pd.to_datetime(
+		tickets["consent_updated_at"], utc=True, errors="coerce", format="mixed"
+	)
+	if (raw_timestamp_present & tickets["consent_updated_at"].isna()).any():
+		raise FanSilverBuildError(
+			"Silver fan validation failed: consent_updated_at is invalid."
+		)
 	apps["registered_at"] = pd.to_datetime(apps["registered_at"], utc=True, errors="coerce")
 	if tickets["created_at"].isna().any():
 		raise FanSilverBuildError("Silver fan validation failed: ticketing created_at is invalid.")
 	if apps["registered_at"].isna().any():
 		raise FanSilverBuildError("Silver fan validation failed: app registered_at is invalid.")
+	consent_present = tickets["marketing_consent"].notna()
+	timestamp_present = tickets["consent_updated_at"].notna()
+	if not consent_present.equals(timestamp_present):
+		raise FanSilverBuildError(
+			"Silver fan validation failed: consent value and timestamp must occur together."
+		)
+	if (
+		timestamp_present.any()
+		and (
+			tickets.loc[timestamp_present, "consent_updated_at"]
+			< tickets.loc[timestamp_present, "created_at"]
+		).any()
+	):
+		raise FanSilverBuildError(
+			"Silver fan validation failed: consent_updated_at precedes customer creation."
+		)
 	return (
 		tickets.sort_values("ticket_customer_id", kind="stable").reset_index(drop=True),
 		apps.sort_values("app_user_id", kind="stable").reset_index(drop=True),
@@ -204,6 +241,13 @@ def build_fans_and_identities(
 			timestamps.append(ticket.created_at)
 		if app is not None:
 			timestamps.append(app.registered_at)
+		marketing_consent = ticket.marketing_consent if ticket is not None else pd.NA
+		consent_updated_at = ticket.consent_updated_at if ticket is not None else pd.NaT
+		activation_eligible = (
+			not pd.isna(marketing_consent)
+			and bool(marketing_consent)
+			and not pd.isna(primary_email)
+		)
 		fan_rows.append(
 			{
 				"fan_id": fan_id,
@@ -211,6 +255,9 @@ def build_fans_and_identities(
 				"display_name": display_name,
 				"first_seen_at": min(timestamps),
 				"source_count": len(timestamps),
+				"marketing_consent": marketing_consent,
+				"consent_updated_at": consent_updated_at,
+				"activation_eligible": activation_eligible,
 			}
 		)
 		for source, source_id, normalized_email in (
@@ -242,6 +289,11 @@ def build_fans_and_identities(
 		fans[column] = fans[column].astype("string")
 	fans["first_seen_at"] = pd.to_datetime(fans["first_seen_at"], utc=True)
 	fans["source_count"] = pd.to_numeric(fans["source_count"]).astype("Int64")
+	fans["marketing_consent"] = fans["marketing_consent"].astype("boolean")
+	fans["consent_updated_at"] = pd.to_datetime(
+		fans["consent_updated_at"], utc=True, errors="coerce"
+	)
+	fans["activation_eligible"] = fans["activation_eligible"].astype("boolean")
 	for column in FAN_IDENTITY_COLUMNS:
 		identities[column] = identities[column].astype("string")
 	validate_fans(fans, identities, tickets, apps)
@@ -275,6 +327,12 @@ def validate_fans(
 	fan_counts = fans.set_index("fan_id")["source_count"]
 	if not fan_counts.equals(identity_counts.reindex(fan_counts.index).astype("Int64")):
 		raise FanSilverBuildError("Silver fan validation failed: source_count is inconsistent.")
+	consent_present = fans["marketing_consent"].notna()
+	if not consent_present.equals(fans["consent_updated_at"].notna()):
+		raise FanSilverBuildError("Silver fan validation failed: canonical consent is incomplete.")
+	expected_eligibility = fans["marketing_consent"].fillna(False) & fans["primary_email"].notna()
+	if not fans["activation_eligible"].equals(expected_eligibility.astype("boolean")):
+		raise FanSilverBuildError("Silver fan validation failed: activation eligibility is inconsistent.")
 
 
 def build_ticket_sales(
