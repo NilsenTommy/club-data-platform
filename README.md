@@ -11,9 +11,11 @@ kan bygges stegvis med en **Bronze → Silver → Gold**-arkitektur.
 > drift, analyse eller beslutningsstøtte i en faktisk fotballklubb.
 
 Prosjektet bruker FK Bodø/Glimt som eksempel og kombinerer kampdata,
-stadioninformasjon og historiske værobservasjoner. Hensikten er å demonstrere
-grunnleggende prinsipper som rådataingest, lagdeling, kildeuavhengige modeller,
-datakvalitet, deterministiske nøkler og reproduserbare datasett.
+stadioninformasjon og historiske værobservasjoner. Det inneholder også en
+helsyntetisk supporterpopulasjon fra to simulerte kildesystemer. Hensikten er å
+demonstrere grunnleggende prinsipper som rådataingest, lagdeling,
+kildeuavhengige modeller, datakvalitet, deterministiske nøkler og
+reproduserbare datasett.
 
 ## Hva prosjektet demonstrerer
 
@@ -24,6 +26,7 @@ datakvalitet, deterministiske nøkler og reproduserbare datasett.
 - Deduplisering av kamper og sammenslåing av venue-aliaser.
 - Kobling fra stadion til nærmeste relevante værstasjon.
 - Et analyseklart Gold-dataprodukt bygget utelukkende fra Silver.
+- Deterministisk generering av fragmenterte, syntetiske supporterdata i Bronze.
 - Enkel, eksplisitt datakvalitetsvalidering uten eget rammeverk.
 - Tester av både normalflyt, feiltilfeller og deterministisk output.
 
@@ -51,6 +54,11 @@ flowchart TD
 		SV --> G
 		SW --> G
 		G --> GM[match_insights.parquet]
+		TS[Simulert billettsystem] --> BTS[Bronze: kunder og billettsalg]
+		SA[Simulert supporterapp] --> BAS[Bronze: appbrukere]
+		BTS -. Senere identitetskobling .-> FI[Supporterinnsikt]
+		BAS -. Senere identitetskobling .-> FI
+		GM -. Senere steg .-> FI
 ```
 
 ### Bronze
@@ -62,9 +70,12 @@ flattening eller forretningslogikk:
 data/bronze/
 ├── football/
 ├── geocoding/
-└── weather/
+├── weather/
 		├── sources/
 		└── observations/
+└── supporter/
+		├── ticket_system/
+		└── app/
 ```
 
 Dette gjør det mulig å inspisere originaldata, bygge Silver på nytt og endre
@@ -107,6 +118,7 @@ eller supporterinnsikt, er bevisst holdt utenfor dagens scope.
 | <img src="docs/images/sources/footballdata.png" alt="FootballData" width="24" height="24"> | [FootballData](https://footballdata.io/) | Kamper for team ID `293` | Bearer-token |
 | <img src="docs/images/sources/openstreetmap.png" alt="OpenStreetMap" width="24" height="24"> | [OpenStreetMap Nominatim](https://nominatim.org/) | Geocoding av stadioner | Identifiserende User-Agent |
 | <img src="docs/images/sources/met-norway.png" alt="MET Norway" width="24" height="24"> | [MET Norway Frost](https://frost.met.no/) | Værstasjoner og historiske observasjoner | Frost client ID |
+| | Syntetisk billettsystem og supporterapp | Fragmenterte supporter- og billettdata | Lokal generator, ingen API-tilgang |
 
 Locationforecast brukes ikke. Det leverer prognoser, mens prosjektet trenger
 historiske observasjoner for ferdigspilte kamper.
@@ -163,6 +175,7 @@ python3 -m src.geocode_venues
 python3 -m src.fetch_weather
 python3 -m src.build_silver
 python3 -m src.build_gold
+python3 -m src.generate_fan_data
 ```
 
 ### 1. Hent kamper
@@ -235,6 +248,47 @@ Match insights:       21 rows
 Med venue-koordinater: 14 rows
 Med vær ved avspark:    8 rows
 ```
+
+### 6. Generer syntetiske supporterdata
+
+`src/generate_fan_data.py` leser kampene fra Silver og genererer to separate,
+simulerte kildesystemer direkte i Bronze:
+
+```text
+data/bronze/supporter/
+├── ticket_system/
+│   ├── ticket_customers.csv
+│   └── ticket_sales.csv
+└── app/
+		└── app_users.csv
+```
+
+All supporterdata er syntetisk. Navn og kontaktopplysninger tilhører ikke ekte
+personer, og e-post bruker bare de reserverte testdomenene `example.com`,
+`example.org` og `example.net`.
+
+Generatoren lager 500 underliggende supportere: 425 billettkunder, 375
+appbrukere og 300 personer som finnes i begge systemene. Den interne identiteten
+brukes bare mens dataene genereres og skrives aldri til råfilene.
+
+- `ticket_customers.csv` har billettsystemets kunde-ID, kontaktfelt og samtykke.
+- `ticket_sales.csv` har billettkjøp knyttet direkte til `match_id` i Silver.
+- `app_users.csv` har appens separate bruker-ID, profilnavn og appinnstillinger.
+
+For overlappende personer inneholder dataene eksakte e-poster, forskjeller i
+store/små bokstaver, ekstra mellomrom, `+alias`, alternative syntetiske adresser
+og manglende adresser. Navn varierer mellom fullt navn, fornavn, initialer og
+kallenavn. Dette gir både enkle normaliseringsproblemer og tvetydige tilfeller,
+uten en ground-truth-fil som avslører koblingen.
+
+Etterspørselen varierer syntetisk med hjemme-/bortekamp, turnering, motstander,
+ukedag og tidligere kampresultater. Bare resultater fra tidligere kamper brukes.
+Når `gold.match_insights.parquet` finnes, brukes kampværet til å skape moderat
+færre sene kjøp ved dårlig vær. Dette er kun en mekanisme for et meningsfullt
+demonstrasjonsdatasett, ikke produksjonslineage fra Gold til Bronze.
+
+Identitetsoppløsning, supporter-Silver og et analyseklart supporterprodukt i
+Gold kommer i et senere steg og er ikke implementert her.
 
 ## Silver-datasett
 
@@ -361,8 +415,8 @@ python3 -m unittest discover -s tests -v
 
 Testene bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
-valg, valg av vær ved kampstart, resultatlogikk, datatyper, validering og
-Parquet-skriving. Dagens suite har 62 tester.
+valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
+deterministiske CSV-filer, datatyper, validering og Parquet-skriving.
 
 Nyttige tilleggskontroller:
 
@@ -388,7 +442,7 @@ git diff --check
 │   ├── fetch_weather.py
 │   ├── build_silver.py
 │   ├── build_gold.py
-│   └── generate_fan_data.py  # Foreløpig tom
+│   └── generate_fan_data.py
 ├── tests/
 ├── .env.example
 ├── requirements.txt
@@ -418,7 +472,8 @@ Bevisste prototypebegrensninger i dagens kode:
 - Ingen retries eller distribuert behandling.
 - Første geocoding-resultat velges automatisk.
 - Silver og Gold bygges som full refresh, ikke inkrementelt.
-- Gold består av ett dataprodukt, og fan-data er ikke implementert.
+- Gold består av ett dataprodukt. Supporterdata finnes bare som syntetiske
+	Bronze-kilder; identitetskobling og supporteranalyse er ikke implementert.
 
 ## Mulige neste steg
 
