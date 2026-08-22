@@ -60,9 +60,10 @@ flowchart TD
 		BAS --> FS
 		FS --> CF[Canonical fans og identities]
 		FS --> CS[Canonical ticket sales]
-		CF -. Senere steg .-> FI[Supporterinnsikt]
-		CS -. Senere steg .-> FI
-		GM -. Senere steg .-> FI
+		CF --> FG[Fan Gold builder]
+		CS --> FG
+		FG --> FA[fan_activation.parquet]
+		GM -. Senere fan-match-produkt .-> FI[Matchrettet aktivering]
 ```
 
 ### Bronze
@@ -105,18 +106,23 @@ Nominatim, Frost, billettsystemet eller supporterappen.
 
 ### Gold
 
-Gold er det analyseklare laget. Det bygges utelukkende fra Silver og kombinerer
-kamp, stadion og vær til ett denormalisert dataprodukt:
+Gold er det analyseklare laget. Det bygges utelukkende fra Silver og inneholder
+separate produkter med tydelig grain:
 
 ```text
 data/gold/
-└── match_insights.parquet
+├── match_insights.parquet
+└── fan_activation.parquet
 ```
 
-Produktet har én rad per kamp og er ment for direkte bruk i analyse, dashboards
-eller enkle modeller, uten at konsumenten trenger å kjenne kildesystemene eller
-koble tabellene selv. Andre tenkbare produkter, for eksempel reisebelastning
-eller supporterinnsikt, er bevisst holdt utenfor dagens scope.
+`match_insights.parquet` har én rad per kamp. `fan_activation.parquet` har én
+rad per canonical fan og kombinerer kjøpsatferd med samtykke for aktivering og
+reaktivering.
+
+`match_insights.parquet` er ment for direkte bruk i analyse, dashboards eller
+enkle modeller, uten at konsumenten trenger å kjenne kildesystemene eller koble
+tabellene selv. Andre kamprelaterte produkter, for eksempel reisebelastning, er
+bevisst holdt utenfor dagens scope.
 
 ## Datakilder
 
@@ -184,6 +190,7 @@ python3 -m src.build_silver
 python3 -m src.build_gold
 python3 -m src.generate_fan_data
 python3 -m src.build_fan_silver
+python3 -m src.build_fan_gold --as-of 2026-08-22
 ```
 
 ### 1. Hent kamper
@@ -335,7 +342,23 @@ Activation eligible: 278 rows
 Ticketing er autoritativ kilde for `marketing_consent`. App-only og uløste
 appidentiteter får ukjent samtykke, ikke et implisitt avslag.
 
-Supporteranalyse i Gold er fortsatt et senere steg og er ikke implementert.
+### 8. Bygg fan activation-Gold
+
+`src/build_fan_gold.py` leser canonical fans og billettsalg fra Silver og skriver
+`data/gold/fan_activation.parquet`. En eksplisitt `--as-of`-dato gjør
+12-månedersvinduet og outputen reproduserbar.
+
+Med snapshot `2026-08-22` blir resultatet:
+
+```text
+Fans:              540 rows
+Marketing allowed: 278 rows
+Segments:          115 INACTIVE, 13 OCCASIONAL,
+				   206 ENGAGED, 206 HIGHLY_ENGAGED
+```
+
+Produktet er et målgruppegrunnlag for billettaktivering og reaktivering, ikke en
+prediktiv modell eller attendance-rapport.
 
 ## Silver-datasett
 
@@ -411,6 +434,37 @@ og `match_id` for kobling til kampdata. Alle salg må ha en gyldig fan og kamp.
 
 ## Gold-datasett
 
+### `fan_activation.parquet`
+
+Én rad per canonical fan, også for fans uten kjøp eller marketing-tillatelse.
+Følgende felt beskriver snapshot, atferd og aktiveringsstatus:
+
+| Felt | Beskrivelse |
+|---|---|
+| `fan_id`, `primary_email`, `display_name` | Canonical fan og kontaktfelt |
+| `as_of_at`, `window_start_at` | Eksklusiv snapshot-grense og inklusiv start på 12-månedersvinduet |
+| `matches_purchased_12m` | Distinkte kamper med completed kjøp |
+| `purchase_transactions_12m` | Antall completed kjøpstransaksjoner |
+| `tickets_purchased_12m` | Sum `quantity` for completed kjøp |
+| `total_spend_12m` | Sum `quantity * unit_price_nok` for completed kjøp |
+| `last_engagement_date` | Siste completed `purchased_at` før snapshot, all-time |
+| `cancelled_transactions_12m`, `refunded_transactions_12m` | Friksjonssignaler som ikke inngår i spend eller segment |
+| `engagement_segment` | `INACTIVE`, `OCCASIONAL`, `ENGAGED` eller `HIGHLY_ENGAGED` |
+| `marketing_consent`, `consent_updated_at` | Samtykkesnapshot fra ticketing |
+| `marketing_allowed` | Sant bare ved eksplisitt samtykke og kontaktbar e-post |
+
+Segmentet bygger på `matches_purchased_12m`: 0 gir `INACTIVE`, 1–2 gir
+`OCCASIONAL`, 3–5 gir `ENGAGED`, og 6 eller flere gir `HIGHLY_ENGAGED`.
+Vinduet bruker `purchased_at` i intervallet `[window_start_at, as_of_at)`.
+
+`matches_purchased_12m` er ikke attendance. Plattformen har ingen billettscan-
+eller eventkilde som kan bekrefte oppmøte. `push_opt_in` er en kanalpreferanse,
+ikke marketing consent. Siden Silver bare har siste consent-snapshot, avvises et
+bygg dersom `consent_updated_at` ligger etter valgt `as_of_at`.
+
+Produktet inneholder e-post for direkte målgruppeuttrekk. En reell løsning må
+beskytte dette produktet med tilgangskontroll og dataminimering.
+
 ### `match_insights.parquet`
 
 Én rad per kamp med kampfakta, resultat sett fra FK Bodø/Glimt, stadionmetadata
@@ -463,6 +517,10 @@ Gold valideres i tillegg mot Silver:
 - joins kan ikke duplisere kamper
 - valgt vær kan ikke ligge mer enn tre timer fra avspark
 - `result` kan bare være `win`, `draw`, `loss` eller null
+- fan activation må ha nøyaktig samme fans som fan-Silver
+- kjøpsmål kan ikke være negative eller ikke-endelige
+- segment og `marketing_allowed` må stemme med beregningsreglene
+- consent-snapshot kan ikke ligge etter valgt `as_of`
 
 Silver bygges deterministisk: uendrede Bronze-filer gir byte-identiske
 Parquet-filer ved gjentatt kjøring i samme miljø. Det samme gjelder Gold for
@@ -480,6 +538,7 @@ print(pd.read_parquet("data/silver/silver_fans.parquet").head())
 print(pd.read_parquet("data/silver/silver_fan_identities.parquet").head())
 print(pd.read_parquet("data/silver/silver_ticket_sales.parquet").head())
 print(pd.read_parquet("data/gold/match_insights.parquet").head())
+print(pd.read_parquet("data/gold/fan_activation.parquet").head())
 ```
 
 ## Tester
@@ -494,7 +553,7 @@ Testene bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
 valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
 canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
-validering og Parquet-skriving.
+fan-segmentering, consent-aware aktivering, validering og Parquet-skriving.
 
 Nyttige tilleggskontroller:
 
@@ -521,7 +580,8 @@ git diff --check
 │   ├── build_silver.py
 │   ├── build_gold.py
 │   ├── generate_fan_data.py
-│   └── build_fan_silver.py
+│   ├── build_fan_silver.py
+│   └── build_fan_gold.py
 ├── tests/
 ├── .env.example
 ├── requirements.txt
@@ -553,7 +613,10 @@ Bevisste prototypebegrensninger i dagens kode:
 - Silver og Gold bygges som full refresh, ikke inkrementelt.
 - Identitetskoblingen bruker bare unik normalisert e-post og håndterer ikke
 	probabilistisk matching, manuell overstyring eller historiske identiteter.
-- Gold består av ett dataprodukt; supporteranalyse er ikke implementert.
+- Fan activation bruker kjøp som engagement-signal fordi faktisk attendance og
+	app-events ikke finnes i kildedataene.
+- Consent er et siste snapshot, ikke en historisert event- eller SCD-modell.
+- Gold har ingen prediktiv aktiveringsscore eller kamprettet fan-match-modell.
 
 ## Mulige neste steg
 
