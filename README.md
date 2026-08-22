@@ -23,11 +23,13 @@ datakvalitet, deterministiske nøkler og reproduserbare datasett.
 - Normalisering til typede Parquet-datasett i Silver.
 - Deduplisering av kamper og sammenslåing av venue-aliaser.
 - Kobling fra stadion til nærmeste relevante værstasjon.
+- Et analyseklart Gold-dataprodukt bygget utelukkende fra Silver.
 - Enkel, eksplisitt datakvalitetsvalidering uten eget rammeverk.
 - Tester av både normalflyt, feiltilfeller og deterministisk output.
 
 Prosjektet demonstrerer foreløpig **ikke** orkestrering, skalerbar distribuert
-prosessering, produksjonsovervåkning eller ferdige forretningsmodeller.
+prosessering, produksjonsovervåkning eller en bred portefølje av
+forretningsmodeller.
 
 ## Arkitektur
 
@@ -45,9 +47,10 @@ flowchart TD
 		S --> SM[matches.parquet]
 		S --> SV[venues.parquet]
 		S --> SW[weather_observations.parquet]
-		SM -. future .-> G[Gold data products]
-		SV -. future .-> G
-		SW -. future .-> G
+		SM --> G[Gold builder]
+		SV --> G
+		SW --> G
+		G --> GM[match_insights.parquet]
 ```
 
 ### Bronze
@@ -84,9 +87,18 @@ Nominatim eller Frost.
 
 ### Gold
 
-Gold er ikke implementert. Et senere steg kan kombinere Silver-entitetene til
-forretningsorienterte dataprodukter, for eksempel kampforhold, reisebelastning
-eller supporterinnsikt. Slike modeller er bevisst holdt utenfor dagens scope.
+Gold er det analyseklare laget. Det bygges utelukkende fra Silver og kombinerer
+kamp, stadion og vær til ett denormalisert dataprodukt:
+
+```text
+data/gold/
+└── match_insights.parquet
+```
+
+Produktet har én rad per kamp og er ment for direkte bruk i analyse, dashboards
+eller enkle modeller, uten at konsumenten trenger å kjenne kildesystemene eller
+koble tabellene selv. Andre tenkbare produkter, for eksempel reisebelastning
+eller supporterinnsikt, er bevisst holdt utenfor dagens scope.
 
 ## Datakilder
 
@@ -150,6 +162,7 @@ python3 -m src.fetch_matches
 python3 -m src.geocode_venues
 python3 -m src.fetch_weather
 python3 -m src.build_silver
+python3 -m src.build_gold
 ```
 
 ### 1. Hent kamper
@@ -210,16 +223,34 @@ Weather observations: 657 rows, 3 elements
 
 Tallene er et øyeblikksbilde og vil endres når nye Bronze-data hentes.
 
+### 5. Bygg Gold
+
+`src/build_gold.py` leser de tre Silver-filene, velger været ved kampstart,
+validerer resultatet og skriver `data/gold/match_insights.parquet`. Steget gjør
+ingen API-kall og leser aldri Bronze direkte. Med datasettet som ligger i repoet
+per 21. august 2026 blir resultatet:
+
+```text
+Match insights:       21 rows
+Med venue-koordinater: 14 rows
+Med vær ved avspark:    8 rows
+```
+
 ## Silver-datasett
 
 ### `matches.parquet`
 
 Én rad per logical fixture med blant annet kamp-ID, UTC-avspark, turnering,
-sesong, lag, score, status og rå venue-felter.
+sesong, lag, score, status, `venue_id` og rå venue-felter.
 
 Dupliserte source-records identifiseres med kombinasjonen av avspark, turnering,
 sesong og lag-ID-er. Recorden med mest utfylte data beholdes. `attendance` er
 nullable fordi dagens kilderespons ikke inneholder feltet.
+
+`venue_id` beregnes med samme stabile venue-resolution som `venues.parquet` og
+`weather_observations.parquet`. Downstream-lag kobler dermed på en eksplisitt
+nøkkel i stedet for på stadionnavn. Feltet er nullable fordi enkelte kilderecords
+mangler venue-felter.
 
 ### `venues.parquet`
 
@@ -250,6 +281,41 @@ velger deterministisk én serie etter:
 
 Denne regelen er en prototypebeslutning, ikke en universell meteorologisk regel.
 
+## Gold-datasett
+
+### `match_insights.parquet`
+
+Én rad per kamp med kampfakta, resultat sett fra FK Bodø/Glimt, stadionmetadata
+og været ved kampstart:
+
+| Felt | Beskrivelse |
+|---|---|
+| `match_id`, `kickoff_at` | Kampnøkkel og UTC-avspark |
+| `competition`, `season` | Turnering og sesong |
+| `home_team_name`, `away_team_name` | Lag |
+| `home_score`, `away_score` | Sluttresultat, nullable |
+| `result` | `win`, `draw`, `loss` eller null |
+| `venue_id`, `stadium_name`, `country` | Stadion, nullable |
+| `latitude`, `longitude` | Stadionkoordinater, nullable |
+| `weather_observed_at` | Valgt observasjonstidspunkt, nullable |
+| `temperature_c`, `precipitation_mm`, `wind_speed_ms` | Vær ved kampstart, nullable |
+
+`result` beregnes for team ID `293` og settes bare når kampen er ferdigspilt og
+begge scorer finnes. Kamper der laget ikke deltar, gir null.
+
+Vær velges deterministisk per kamp:
+
+1. Kandidatene må høre til kampens `venue_id`.
+2. Observasjonen må være maksimalt tre timer fra avspark.
+3. Korteste absolutte tidsavstand vinner.
+4. Ved lik avstand foretrekkes tidspunktet før avspark.
+5. Avstand til værstasjon og stasjons-ID brukes som siste tiebreakere.
+
+Deretter pivoteres `air_temperature`, `sum(precipitation_amount PT1H)` og
+`wind_speed` fra det valgte tidspunktet til hver sin kolonne. Alle koblinger er
+venstre joins, slik at kamper uten geokoding eller vær fortsatt er med i
+datasettet med nullable felter.
+
 ## Datakvalitet
 
 Bygget stopper med en tydelig feilmelding ved kritiske feil, blant annet:
@@ -261,8 +327,18 @@ Bygget stopper med en tydelig feilmelding ved kritiske feil, blant annet:
 - manglende observation-tid eller element
 - weather values som ikke er numeriske
 
+Gold valideres i tillegg mot Silver:
+
+- `match_id` og `kickoff_at` kan ikke være null
+- `match_id` må være unik
+- Gold må ha samme kamper som Silver
+- joins kan ikke duplisere kamper
+- valgt vær kan ikke ligge mer enn tre timer fra avspark
+- `result` kan bare være `win`, `draw`, `loss` eller null
+
 Silver bygges deterministisk: uendrede Bronze-filer gir byte-identiske
-Parquet-filer ved gjentatt kjøring i samme miljø.
+Parquet-filer ved gjentatt kjøring i samme miljø. Det samme gjelder Gold for
+uendret Silver.
 
 ## Inspiser resultatene
 
@@ -272,6 +348,7 @@ import pandas as pd
 print(pd.read_parquet("data/silver/matches.parquet").head())
 print(pd.read_parquet("data/silver/venues.parquet").head())
 print(pd.read_parquet("data/silver/weather_observations.parquet").head())
+print(pd.read_parquet("data/gold/match_insights.parquet").head())
 ```
 
 ## Tester
@@ -284,7 +361,8 @@ python3 -m unittest discover -s tests -v
 
 Testene bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
-valg, datatyper, validering og Parquet-skriving. Dagens suite har 47 tester.
+valg, valg av vær ved kampstart, resultatlogikk, datatyper, validering og
+Parquet-skriving. Dagens suite har 62 tester.
 
 Nyttige tilleggskontroller:
 
@@ -300,7 +378,7 @@ git diff --check
 ├── data/
 │   ├── bronze/
 │   ├── silver/
-│   └── gold/                 # Ikke implementert
+│   └── gold/
 ├── docs/
 │   ├── architecture.md       # Foreløpig tom
 │   └── governance.md         # Foreløpig tom
@@ -309,7 +387,7 @@ git diff --check
 │   ├── geocode_venues.py
 │   ├── fetch_weather.py
 │   ├── build_silver.py
-│   ├── build_gold.py         # Foreløpig tom
+│   ├── build_gold.py
 │   └── generate_fan_data.py  # Foreløpig tom
 ├── tests/
 ├── .env.example
@@ -339,19 +417,19 @@ Bevisste prototypebegrensninger i dagens kode:
 - Ingen generell konfigurasjon av tidsvinduer eller datakilder.
 - Ingen retries eller distribuert behandling.
 - Første geocoding-resultat velges automatisk.
-- Silver bygges som full refresh, ikke inkrementelt.
-- Gold og fan-data er ikke implementert.
+- Silver og Gold bygges som full refresh, ikke inkrementelt.
+- Gold består av ett dataprodukt, og fan-data er ikke implementert.
 
 ## Mulige neste steg
 
 En naturlig videreføring kan være:
 
-1. Definere ett konkret Gold-dataprodukt og dets brukere.
-2. Legge pipelinekjøringen i en enkel orchestrator.
-3. Flytte rådata til objektlagring og innføre partisjonering.
-4. Dokumentere arkitektur, data contracts og eierskap i `docs/`.
-5. Legge til CI som kjører tester og bygger Silver på fixtures.
-6. Innføre eksplisitt lineage mellom kamp, venue, station og observation.
+1. Legge pipelinekjøringen i en enkel orchestrator.
+2. Flytte rådata til objektlagring og innføre partisjonering.
+3. Dokumentere arkitektur, data contracts og eierskap i `docs/`.
+4. Legge til CI som kjører tester og bygger Silver og Gold på fixtures.
+5. Innføre eksplisitt lineage mellom kamp, venue, station og observation.
+6. Utvide Gold med flere dataprodukter når konkrete brukere er definert.
 
 Poenget er ikke å legge til flest mulig verktøy, men å la hvert nytt lag løse et
 konkret problem som denne enkle filbaserte prototypen ikke lenger håndterer.

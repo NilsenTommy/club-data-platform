@@ -31,6 +31,7 @@ MATCH_COLUMNS = [
 	"home_score",
 	"away_score",
 	"status",
+	"venue_id",
 	"venue_name",
 	"venue_location_raw",
 	"attendance",
@@ -156,7 +157,10 @@ def deduplicate_matches(matches: list) -> list:
 	return [item[1] for item in fixtures.values()]
 
 
-def build_matches(matches: list) -> pd.DataFrame:
+def build_matches(
+	matches: list,
+	geocoding_dir: Path = geocode_venues.OUTPUT_DIR,
+) -> pd.DataFrame:
 	match_ids = [match.get("match_id") for match in matches]
 	duplicate_ids = sorted(
 		{match_id for match_id in match_ids if match_ids.count(match_id) > 1}
@@ -165,6 +169,10 @@ def build_matches(matches: list) -> pd.DataFrame:
 		raise SilverBuildError(
 			f"Silver matches validation failed: duplicate match_id values {duplicate_ids}."
 		)
+	venue_ids_by_match = {
+		id(resolution["match"]): resolution["venue_id"]
+		for resolution in venue_resolutions(matches, geocoding_dir)
+	}
 	rows = []
 	for match in deduplicate_matches(matches):
 		venue = match.get("venue") if isinstance(match, dict) else None
@@ -184,6 +192,7 @@ def build_matches(matches: list) -> pd.DataFrame:
 				"home_score": nested_value(match, "score", "home"),
 				"away_score": nested_value(match, "score", "away"),
 				"status": match.get("status"),
+				"venue_id": venue_ids_by_match.get(id(match)),
 				"venue_name": geocode_venues.normalize_text(
 					venue.get("stadium_name")
 				)
@@ -213,6 +222,7 @@ def build_matches(matches: list) -> pd.DataFrame:
 		"home_team_name",
 		"away_team_name",
 		"status",
+		"venue_id",
 		"venue_name",
 		"venue_location_raw",
 		"source",

@@ -41,7 +41,10 @@ class BuildSilverTests(unittest.TestCase):
 		return path
 
 	def test_build_matches_has_typed_canonical_schema(self):
-		frame = build_silver.build_matches([self.make_match()])
+		with tempfile.TemporaryDirectory() as temporary_directory:
+			frame = build_silver.build_matches(
+				[self.make_match()], Path(temporary_directory)
+			)
 
 		self.assertEqual(list(frame.columns), build_silver.MATCH_COLUMNS)
 		self.assertEqual(frame.loc[0, "match_id"], 1)
@@ -50,7 +53,41 @@ class BuildSilverTests(unittest.TestCase):
 		self.assertTrue(pd.isna(frame.loc[0, "attendance"]))
 		self.assertEqual(str(frame["match_id"].dtype), "Int64")
 		self.assertEqual(str(frame["kickoff_at"].dtype), "datetime64[ns, UTC]")
+		self.assertEqual(str(frame["venue_id"].dtype), "string")
 		self.assertEqual(frame.loc[0, "source"], "FootballData")
+
+	def test_build_matches_shares_venue_id_with_venues(self):
+		match = self.make_match()
+		result = {
+			"lat": "67.2766478",
+			"lon": "14.3844344",
+			"osm_type": "way",
+			"osm_id": 24292284,
+			"display_name": "Aspmyra stadion, Bodø, Norway",
+			"address": {"country": "Norway"},
+		}
+
+		with tempfile.TemporaryDirectory() as temporary_directory:
+			geocoding_dir = Path(temporary_directory)
+			self.write_geocode(match, geocoding_dir, [result])
+			match_frame = build_silver.build_matches([match], geocoding_dir)
+			venue_frame = build_silver.build_venues([match], geocoding_dir)
+
+		self.assertEqual(match_frame.loc[0, "venue_id"], venue_frame.loc[0, "venue_id"])
+		self.assertEqual(
+			match_frame.loc[0, "venue_id"],
+			build_silver.stable_venue_id("ignored", "ignored", result),
+		)
+
+	def test_build_matches_leaves_venue_id_null_without_venue_fields(self):
+		match = self.make_match()
+		match["venue"] = {}
+
+		with tempfile.TemporaryDirectory() as temporary_directory:
+			frame = build_silver.build_matches([match], Path(temporary_directory))
+
+		self.assertTrue(pd.isna(frame.loc[0, "venue_id"]))
+		self.assertTrue(pd.isna(frame.loc[0, "venue_name"]))
 
 	def test_build_matches_rejects_duplicates_and_missing_required_fields(self):
 		match = self.make_match()
@@ -68,11 +105,18 @@ class BuildSilverTests(unittest.TestCase):
 		poorer = self.make_match(match_id=197228, stadium_name="", stadium_location="")
 		poorer["score"] = {"home": 3, "away": 1}
 
-		frame = build_silver.build_matches([poorer, richer])
+		with tempfile.TemporaryDirectory() as temporary_directory:
+			frame = build_silver.build_matches(
+				[poorer, richer], Path(temporary_directory)
+			)
 
 		self.assertEqual(len(frame), 1)
 		self.assertEqual(frame.loc[0, "match_id"], 200399)
 		self.assertEqual(frame.loc[0, "venue_name"], "Aspmyra Stadion")
+		self.assertEqual(
+			frame.loc[0, "venue_id"],
+			build_silver.stable_venue_id("Aspmyra Stadion", "Håloglandsgata 30, Bodø"),
+		)
 
 	def test_stable_venue_id_ignores_case_and_whitespace(self):
 		first = build_silver.stable_venue_id(
@@ -331,9 +375,11 @@ class BuildSilverTests(unittest.TestCase):
 				build_silver.build_weather_observations([match], *directories)
 
 	def test_write_silver_creates_readable_parquet_files(self):
-		match_frame = build_silver.build_matches([self.make_match()])
 		with tempfile.TemporaryDirectory() as temporary_directory:
 			root = Path(temporary_directory)
+			match_frame = build_silver.build_matches(
+				[self.make_match()], root / "geocoding"
+			)
 			venue_frame = build_silver.build_venues([self.make_match()], root / "geocoding")
 			weather_frame = pd.DataFrame(columns=build_silver.WEATHER_COLUMNS)
 			weather_frame["observed_at"] = pd.to_datetime(weather_frame["observed_at"], utc=True)
