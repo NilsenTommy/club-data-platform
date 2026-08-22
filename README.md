@@ -2,39 +2,55 @@
 
 ![Oversikt over Football Club Data Platform](docs/images/football-club-data-platform-overview.png)
 
-Et lite portfolio-prosjekt som viser hvordan en dataplattform for en fotballklubb
-kan bygges stegvis med en **Bronze → Silver → Gold**-arkitektur.
+En liten, komplett referanseimplementasjon av et **klubbeid datafundament**:
+reelle kampdata, stadiondata og historiske værobservasjoner kombinert med en
+helsyntetisk supporterpopulasjon, foredlet gjennom **Bronze → Silver → Gold** til
+to analyseklare dataprodukter.
 
 > [!IMPORTANT]
-> Dette er en teknisk demonstrasjon og et læringsprosjekt. Det er ikke en
-> produksjonsklar plattform, og skal ikke presenteres som en komplett løsning for
-> drift, analyse eller beslutningsstøtte i en faktisk fotballklubb.
+> Dette er en teknisk demonstrasjon og et læringsprosjekt, ikke en
+> produksjonsklar plattform. All supporterdata er syntetisk og tilhører ikke
+> ekte personer.
 
-Prosjektet bruker FK Bodø/Glimt som eksempel og kombinerer kampdata,
-stadioninformasjon og historiske værobservasjoner. Det inneholder også en
-helsyntetisk supporterpopulasjon fra to simulerte kildesystemer. Hensikten er å
-demonstrere grunnleggende prinsipper som rådataingest, lagdeling,
-kildeuavhengige modeller, datakvalitet, deterministiske nøkler og
-reproduserbare datasett.
+| | |
+|---|---|
+| **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
+| **Stack** | Python 3.9, pandas, pyarrow, Parquet, `unittest` |
+| **Omfang** | 3 eksterne API-er · 8 pipeline-steg · 6 Silver-datasett · 2 Gold-dataprodukter · 98 tester |
+| **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
+| **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) |
 
-## Hva prosjektet demonstrerer
+---
 
-- Innhenting fra flere eksterne API-er med forskjellig autentisering.
-- Uendrede kilderesponser i et Bronze-lag.
-- Filbasert caching for å unngå unødvendige API-kall.
-- Normalisering til typede Parquet-datasett i Silver.
-- Deduplisering av kamper og sammenslåing av venue-aliaser.
-- Kobling fra stadion til nærmeste relevante værstasjon.
-- Et analyseklart Gold-dataprodukt bygget utelukkende fra Silver.
-- Deterministisk generering av fragmenterte, syntetiske supporterdata i Bronze.
-- Enkel, eksplisitt datakvalitetsvalidering uten eget rammeverk.
-- Tester av både normalflyt, feiltilfeller og deterministisk output.
+## 1. Problem
 
-Prosjektet demonstrerer foreløpig **ikke** orkestrering, skalerbar distribuert
-prosessering, produksjonsovervåkning eller en bred portefølje av
-forretningsmodeller.
+> Fotballklubber produserer data på tvers av spesialiserte systemer for sport,
+> billettering, kommersiell drift og digitale flater. Utfordringen er å etablere
+> et pålitelig datafundament uten å binde organisasjonen til enkeltstående
+> kildesystemer eller aktiveringsplattformer.
 
-## Arkitektur
+Konsekvensen når fundamentet mangler er gjenkjennelig: hvert nytt spørsmål
+besvares ved å koble sammen kildesystemer på nytt, «supporter» betyr én ting i
+billettsystemet og noe annet i appen, og aktiveringsverktøyet ender opp med å eie
+definisjonen av hvem klubben faktisk har lov til å kontakte.
+
+## 2. Mål
+
+> Bygge en liten referanseimplementasjon av et klubbeid datafundament.
+
+Konkret skal prosjektet vise:
+
+- **Rådata bevares uendret**, så intern modell kan endres uten ny innhenting.
+- **Én kildeuavhengig modell** med plattformens egne nøkler for kamp, stadion og fan.
+- **Dataprodukter med tydelig grain**, klare til bruk uten kjennskap til kildene.
+- **Determinisme**, så en endring i tall alltid kan spores til en endring i data
+  eller logikk — aldri til tilfeldigheter i kjøringen.
+- **Samtykke som en førsteklasses egenskap**, ikke et filter noen må huske å legge på.
+
+Målet er *ikke* å demonstrere flest mulig verktøy. Hvert valg skal kunne
+forsvares med problemet det løser.
+
+## 3. Arkitektur
 
 ```mermaid
 flowchart TD
@@ -66,63 +82,119 @@ flowchart TD
 		GM -. Senere fan-match-produkt .-> FI[Matchrettet aktivering]
 ```
 
-### Bronze
+| Lag | Ansvar | Eier | Format |
+|---|---|---|---|
+| **Bronze** | Kilderesponser lagret byte-for-byte, immutable og cachet | Kildesystemet | JSON / CSV |
+| **Silver** | Canonical, kildeuavhengig modell med typing, deduplisering og validering | Plattformen | Parquet |
+| **Gold** | Dataprodukter med ett definert grain og én definert bruker | Forretningsdomenet | Parquet |
 
-Bronze representerer kildesystemene. HTTP-responsene lagres som mottatt, uten
-flattening eller forretningslogikk:
+Gold leser bare Silver. Silver leser bare Bronze. Ingen steg hopper over et lag,
+og ingen steg skriver tilbake til en kilde.
+
+Detaljert gjennomgang av hvert lag, alle åtte pipeline-steg, datasett-skjemaene
+og begrunnelsen bak hver avveiing ligger i
+[docs/architecture.md](docs/architecture.md).
+
+## 4. Dataprodukter
+
+### Match Insights — `data/gold/match_insights.parquet`
+
+Én rad per kamp med kampfakta, resultat sett fra klubben, stadionmetadata og
+været ved avspark.
+
+| | |
+|---|---|
+| **Grain** | Én kamp |
+| **Bruk** | Kampanalyse, dashboards, kontekst for etterspørselsmodeller |
+| **Persondata** | Ingen |
+| **Dagens uttrekk** | 21 kamper, 14 med koordinater, 8 med vær ved avspark |
+
+Produktet svarer på spørsmål som *«spiller vi dårligere i regn på bortebane?»*
+uten at konsumenten trenger å kjenne FootballData, Nominatim eller Frost.
+
+**Sentral avveiing:** Vær er ikke en enkel join. Én kamp kan ha mange
+observasjoner fra flere tidsserier. Valget er derfor helt deterministisk — samme
+`venue_id`, maks tre timer fra avspark, korteste tidsavstand, deretter før
+avspark, deretter stasjonsavstand og stasjons-ID. Finnes ingen stasjon innenfor
+50 km, står feltene tomme i stedet for å fylles med en måling fra feil sted.
+
+### Fan Activation — `data/gold/fan_activation.parquet`
+
+Én rad per canonical fan med 12 måneders kjøpsatferd, engagement-segment,
+samtykkestatus og aktiveringsstatus.
+
+| | |
+|---|---|
+| **Grain** | Én canonical fan |
+| **Bruk** | Målgruppegrunnlag for billettaktivering og reaktivering |
+| **Persondata** | Ja — e-post og visningsnavn (syntetisk) |
+| **Dagens uttrekk** | 540 fans, 278 aktiveringsbare · 115 `INACTIVE`, 13 `OCCASIONAL`, 206 `ENGAGED`, 206 `HIGHLY_ENGAGED` |
+
+Snapshotdatoen er en påkrevd `--as-of`-parameter, ikke `now()`. Det gjør
+12-månedersvinduet reproduserbart og testbart.
+
+**Sentral avveiing:** de to kildesystemene deler ingen nøkkel, og generatoren
+skriver bevisst aldri sin interne person-ID til rådata. Identiteten må derfor
+løses fra fragmenterte felter. Koblingen er konservativ — to identiteter slås
+sammen bare når den normaliserte e-postadressen forekommer nøyaktig én gang i
+hver kilde. Resultatet er 260 av 540 fans koblet på tvers av kilder, altså langt
+fra alt. Det er poenget: en forklarbar regel som lar tvilstilfeller stå uløst er
+mer verdt enn et imponerende tall ingen kan etterprøve.
+
+**Ikke attendance.** `matches_purchased_12m` teller kjøp, ikke oppmøte.
+Plattformen har ingen billettscan-kilde, og produktet later ikke som den har det.
+
+## 5. Governance
 
 ```text
-data/bronze/
-├── football/
-├── geocoding/
-├── weather/
-		├── sources/
-		└── observations/
-└── supporter/
-		├── ticket_system/
-		└── app/
+Kildesystemene eier de operasjonelle prosessene.
+Domenene beholder forretningseierskapet.
+Plattformen lager gjenbrukbare canonical data.
+Persondata skilles fra analytisk bruk der det er mulig.
+Aktivering krever gyldig samtykke.
 ```
 
-Dette gjør det mulig å inspisere originaldata, bygge Silver på nytt og endre
-intern modell uten å hente alle kildene på nytt.
+I praksis:
 
-### Silver
+- **Ticketing er autoritativ** for samtykke. Plattformen kopierer verdien, den
+  definerer den ikke.
+- **Samtykke har tre tilstander** — `True` (283), `False` (142) og *ukjent* (115).
+  App-only fans får ukjent, ikke et implisitt avslag. `False` er en beslutning
+  tatt av en person; ukjent er en mangel hos plattformen.
+- **`marketing_allowed` krever både** eksplisitt samtykke og en kontaktbar
+  e-post. Et segment beskriver atferd — samtykket avgjør handling.
+- **`push_opt_in` er en kanalpreferanse**, ikke marketing consent.
+- **Bygget avvises** hvis samtykket ble oppdatert etter valgt `--as-of`, slik at
+  en målgruppeliste aldri bygger på en status som ikke fantes på
+  snapshot-tidspunktet.
+- **Kampdomenet er persondatafritt** og kan derfor deles bredere enn
+  fan-produktene.
 
-Silver representerer plattformens interne, kildeuavhengige modell. Rå JSON blir
-typet, validert og skrevet som Parquet:
+Eierskapsmodell, dataminimering, kjente gap og prioritert plan står i
+[docs/governance.md](docs/governance.md).
 
-```text
-data/silver/
-├── matches.parquet
-├── venues.parquet
-├── weather_observations.parquet
-├── silver_fans.parquet
-├── silver_fan_identities.parquet
-└── silver_ticket_sales.parquet
-```
+## 6. Hva jeg bevisst ikke bygde
 
-Downstream-kode trenger dermed ikke kjenne kildestrukturen til FootballData,
-Nominatim, Frost, billettsystemet eller supporterappen.
+Det er lett å legge til verktøy. Det som er verdt å vise, er hvorfor de ikke er
+lagt til ennå.
 
-### Gold
+| Ikke bygget | Hvorfor ikke | Når det ville lønt seg |
+|---|---|---|
+| Orkestrering (Airflow, Dagster) | Åtte steg i fast rekkefølge kjøres like godt fra en kommandolinje | Så snart kjøringene må planlegges, gjenopptas etter feil og overvåkes |
+| Spark, DuckDB eller dbt | Datasettet er lite nok til pandas. En motor uten et problem å løse skjuler prinsippene bak verktøy | Ved volum eller transformasjonsmengde som gjør SQL-modellering billigere enn Python |
+| Valideringsrammeverk | Eksplisitt Python viser *hva* som valideres og hvorfor, uten et rammeverk å lære først | Når reglene skal deles og håndheves på tvers av team |
+| Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
+| Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
+| Prediktiv aktiveringsscore | Uten attendance- og app-events ville modellen lært av de samme kjøpene den allerede rapporterer | Når event-data faktisk finnes |
+| Fan-match-produkt | Krysser to domener og reiser reelle spørsmål om tilgang og dataminimering som fortjener en beslutning, ikke en snarvei | Når både konsument og tilgangsmodell er definert |
+| Tilgangskontroll og retention | Prototypen er filbasert og har én bruker | Umiddelbart, hvis data om ekte personer var involvert |
 
-Gold er det analyseklare laget. Det bygges utelukkende fra Silver og inneholder
-separate produkter med tydelig grain:
+Full liste over prototypebegrensninger står i
+[docs/architecture.md](docs/architecture.md#kjente-begrensninger), og
+governance-gapene med prioritert rekkefølge i
+[docs/governance.md](docs/governance.md#kjente-gap-og-plan).
 
-```text
-data/gold/
-├── match_insights.parquet
-└── fan_activation.parquet
-```
-
-`match_insights.parquet` har én rad per kamp. `fan_activation.parquet` har én
-rad per canonical fan og kombinerer kjøpsatferd med samtykke for aktivering og
-reaktivering.
-
-`match_insights.parquet` er ment for direkte bruk i analyse, dashboards eller
-enkle modeller, uten at konsumenten trenger å kjenne kildesystemene eller koble
-tabellene selv. Andre kamprelaterte produkter, for eksempel reisebelastning, er
-bevisst holdt utenfor dagens scope.
+---
 
 ## Datakilder
 
@@ -193,338 +265,24 @@ python3 -m src.build_fan_silver
 python3 -m src.build_fan_gold --as-of 2026-08-22
 ```
 
-### 1. Hent kamper
-
-`src/fetch_matches.py` henter kamper for det hardkodede laget `293` og lagrer
-hele responsen under:
-
-```text
-data/bronze/football/matches_YYYY-MM-DD.json
-```
-
-Skriptet bruker 30 sekunders timeout og gir tydelige feil for manglende nøkkel,
-autentiseringsfeil, nettverksfeil og andre HTTP-statuser enn 200.
-
-### 2. Geocode stadioner
-
-`src/geocode_venues.py` leser nyeste kampfil, dedupliserer søk og kaller
-Nominatim sekvensielt. Det venter minst ett sekund mellom faktiske kall og bruker
-eksisterende filer som immutable cache.
-
-```text
-data/bronze/geocoding/venue_<slug>_<query-hash>.json
-```
-
-Første Nominatim-resultat brukes i denne prototypen. Tomme søkeresultater lagres
-og rapporteres, men stopper ikke hele pipelinen.
-
-### 3. Hent historisk vær
-
-`src/fetch_weather.py` bruker venue-koordinatene til å finne nærmeste Frost-
-stasjon som tilbyr:
-
-- `air_temperature`
-- `sum(precipitation_amount PT1H)`
-- `wind_speed`
-
-Stasjonen må være maksimalt 50 km fra stadion. Observasjoner hentes fra tre timer
-før til tre timer etter avspark. Source- og observation-responser lagres separat:
-
-```text
-data/bronze/weather/sources/
-data/bronze/weather/observations/
-```
-
-Manglende dekning er et forventet utfall for enkelte europeiske stadioner.
-
-### 4. Bygg Silver
-
-`src/build_silver.py` leser dagens Bronze-filer, bygger canonical entiteter,
-validerer dem og skriver tre Parquet-filer. Med datasettet som ligger i repoet per
-21. august 2026 blir resultatet:
-
-```text
-Matches:              21 rows
-Venues:                9 rows, 7 geocoded
-Weather observations: 657 rows, 3 elements
-```
-
-Tallene er et øyeblikksbilde og vil endres når nye Bronze-data hentes.
-
-### 5. Bygg Gold
-
-`src/build_gold.py` leser de tre Silver-filene, velger været ved kampstart,
-validerer resultatet og skriver `data/gold/match_insights.parquet`. Steget gjør
-ingen API-kall og leser aldri Bronze direkte. Med datasettet som ligger i repoet
-per 21. august 2026 blir resultatet:
-
-```text
-Match insights:       21 rows
-Med venue-koordinater: 14 rows
-Med vær ved avspark:    8 rows
-```
-
-### 6. Generer syntetiske supporterdata
-
-`src/generate_fan_data.py` leser kampene fra Silver og genererer to separate,
-simulerte kildesystemer direkte i Bronze:
-
-```text
-data/bronze/supporter/
-├── ticket_system/
-│   ├── ticket_customers.csv
-│   └── ticket_sales.csv
-└── app/
-		└── app_users.csv
-```
-
-All supporterdata er syntetisk. Navn og kontaktopplysninger tilhører ikke ekte
-personer, og e-post bruker bare de reserverte testdomenene `example.com`,
-`example.org` og `example.net`.
-
-Generatoren lager 500 underliggende supportere: 425 billettkunder, 375
-appbrukere og 300 personer som finnes i begge systemene. Den interne identiteten
-brukes bare mens dataene genereres og skrives aldri til råfilene.
-
-- `ticket_customers.csv` har billettsystemets kunde-ID, kontaktfelt,
-  `marketing_consent` og `consent_updated_at`.
-- `ticket_sales.csv` har billettkjøp knyttet direkte til `match_id` i Silver.
-- `app_users.csv` har appens separate bruker-ID, profilnavn og appinnstillinger.
-
-Samtykket er en syntetisk snapshot-verdi med et logisk hendelsestidspunkt etter
-kundeopprettelse. Appfeltet `push_opt_in` er en kanalpreferanse og tolkes ikke
-som marketing consent.
-
-For overlappende personer inneholder dataene eksakte e-poster, forskjeller i
-store/små bokstaver, ekstra mellomrom, `+alias`, alternative syntetiske adresser
-og manglende adresser. Navn varierer mellom fullt navn, fornavn, initialer og
-kallenavn. Dette gir både enkle normaliseringsproblemer og tvetydige tilfeller,
-uten en ground-truth-fil som avslører koblingen.
-
-Etterspørselen varierer syntetisk med hjemme-/bortekamp, turnering, motstander,
-ukedag og tidligere kampresultater. Bare resultater fra tidligere kamper brukes.
-Når `gold.match_insights.parquet` finnes, brukes kampværet til å skape moderat
-færre sene kjøp ved dårlig vær. Dette er kun en mekanisme for et meningsfullt
-demonstrasjonsdatasett, ikke produksjonslineage fra Gold til Bronze.
-
-Den interne ground truth-identiteten fra generatoren er fortsatt ikke
-tilgjengelig for downstream-steg. Fan-Silver må derfor løse koblingen fra de
-fragmenterte kildefeltene på samme måte som med reelle kildesystemer.
-
-### 7. Bygg canonical fan-Silver
-
-`src/build_fan_silver.py` leser de tre supporterfilene i Bronze og skriver:
-
-```text
-data/silver/
-├── silver_fans.parquet
-├── silver_fan_identities.parquet
-└── silver_ticket_sales.parquet
-```
-
-Identitetskoblingen er bevisst enkel og konservativ. E-post normaliseres med
-trim, små bokstaver og fjerning av `+alias`. En ticket-identitet og en
-app-identitet kobles bare når den normaliserte adressen forekommer nøyaktig én
-gang i hver kilde. Duplikater, manglende e-post og alternative adresser forblir
-separate fans. Dette unngår en falsk sikkerhet om at den enkle prototypen løser
-alle identitetsproblemer.
-
-Med dagens syntetiske Bronze-data blir resultatet:
-
-```text
-Fans:              540 rows, 260 linked across sources
-Fan identities:    800 rows
-Ticket sales:     3771 rows
-Marketing consent: 283 true, 142 false, 115 unknown
-Activation eligible: 278 rows
-```
-
-Ticketing er autoritativ kilde for `marketing_consent`. App-only og uløste
-appidentiteter får ukjent samtykke, ikke et implisitt avslag.
-
-### 8. Bygg fan activation-Gold
-
-`src/build_fan_gold.py` leser canonical fans og billettsalg fra Silver og skriver
-`data/gold/fan_activation.parquet`. En eksplisitt `--as-of`-dato gjør
-12-månedersvinduet og outputen reproduserbar.
-
-Med snapshot `2026-08-22` blir resultatet:
-
-```text
-Fans:              540 rows
-Marketing allowed: 278 rows
-Segments:          115 INACTIVE, 13 OCCASIONAL,
-				   206 ENGAGED, 206 HIGHLY_ENGAGED
-```
-
-Produktet er et målgruppegrunnlag for billettaktivering og reaktivering, ikke en
-prediktiv modell eller attendance-rapport.
-
-## Silver-datasett
-
-### `matches.parquet`
-
-Én rad per logical fixture med blant annet kamp-ID, UTC-avspark, turnering,
-sesong, lag, score, status, `venue_id` og rå venue-felter.
-
-Dupliserte source-records identifiseres med kombinasjonen av avspark, turnering,
-sesong og lag-ID-er. Recorden med mest utfylte data beholdes. `attendance` er
-nullable fordi dagens kilderespons ikke inneholder feltet.
-
-`venue_id` beregnes med samme stabile venue-resolution som `venues.parquet` og
-`weather_observations.parquet`. Downstream-lag kobler dermed på en eksplisitt
-nøkkel i stedet for på stadionnavn. Feltet er nullable fordi enkelte kilderecords
-mangler venue-felter.
-
-### `venues.parquet`
-
-Én rad per canonical stadion med stabil `venue_id`, rå stadiontekst, koordinater
-og tilgjengelig Nominatim-metadata.
-
-Geocodede venues bruker OSM-identitet som grunnlag for ID. Koordinater brukes som
-fallback når OSM-ID mangler, og normalisert stadionnavn/lokasjon brukes når venue
-ikke er geocodet. Dette samler blant annet flere tekstvarianter av Aspmyra til én
-venue.
-
-`geocoding_confidence` er nullable fordi Nominatim ikke leverer en direkte
-confidence-score som tilsvarer feltet.
-
-### `weather_observations.parquet`
-
-Historiske observasjoner i long format: én canonical måling per venue,
-værstasjon, tidspunkt og element. Datasettet inneholder også station metadata og
-Haversine-avstand mellom stadion og værstasjon.
-
-Frost kan returnere flere tidsserier for samme tidspunkt og element. Silver
-velger deterministisk én serie etter:
-
-1. Laveste `qualityCode`.
-2. `PT1H` før `PT30M` før `PT10M`.
-3. Laveste `timeSeriesId`.
-4. Første forekomst i kilderesponsen.
-
-Denne regelen er en prototypebeslutning, ikke en universell meteorologisk regel.
-
-### `silver_fans.parquet`
-
-Én rad per canonical fan med stabil `fan_id`, foretrukket normalisert e-post,
-visningsnavn, første observerte tidspunkt og antall koblede kildesystemer.
-ID-en er en deterministisk hash av ticket-identiteten når den finnes, ellers
-app-identiteten. Nye tidligere-sorterende kilderader endrer dermed ikke
-eksisterende fan-ID-er.
-
-`marketing_consent` og `consent_updated_at` følger ticket-identiteten inn i den
-canonical fanen. `activation_eligible` er en enkel, eksplisitt regel som krever
-både `marketing_consent=True` og en kontaktbar normalisert e-post. Feltet er en
-demonstrasjon av hvordan identitet og samtykke kan kombineres med atferd fra
-`silver_ticket_sales.parquet`; det er ikke en produksjonsklar policy engine.
-
-### `silver_fan_identities.parquet`
-
-Bridge-tabell mellom `fan_id` og kildenes egne identifikatorer. `source` er
-`ticketing` eller `app`, mens `source_id` beholder original kunde- eller
-appbruker-ID. `match_method` viser om identiteten ble koblet via normalisert
-e-post eller bare representerer én kilde. Bridge-modellen kan senere utvides med
-for eksempel en commerce-identitet.
-
-### `silver_ticket_sales.parquet`
-
-Typet billettsalg med både `fan_id`, original `ticket_customer_id` for lineage
-og `match_id` for kobling til kampdata. Alle salg må ha en gyldig fan og kamp.
-
-## Gold-datasett
-
-### `fan_activation.parquet`
-
-Én rad per canonical fan, også for fans uten kjøp eller marketing-tillatelse.
-Følgende felt beskriver snapshot, atferd og aktiveringsstatus:
-
-| Felt | Beskrivelse |
-|---|---|
-| `fan_id`, `primary_email`, `display_name` | Canonical fan og kontaktfelt |
-| `as_of_at`, `window_start_at` | Eksklusiv snapshot-grense og inklusiv start på 12-månedersvinduet |
-| `matches_purchased_12m` | Distinkte kamper med completed kjøp |
-| `purchase_transactions_12m` | Antall completed kjøpstransaksjoner |
-| `tickets_purchased_12m` | Sum `quantity` for completed kjøp |
-| `total_spend_12m` | Sum `quantity * unit_price_nok` for completed kjøp |
-| `last_engagement_date` | Siste completed `purchased_at` før snapshot, all-time |
-| `cancelled_transactions_12m`, `refunded_transactions_12m` | Friksjonssignaler som ikke inngår i spend eller segment |
-| `engagement_segment` | `INACTIVE`, `OCCASIONAL`, `ENGAGED` eller `HIGHLY_ENGAGED` |
-| `marketing_consent`, `consent_updated_at` | Samtykkesnapshot fra ticketing |
-| `marketing_allowed` | Sant bare ved eksplisitt samtykke og kontaktbar e-post |
-
-Segmentet bygger på `matches_purchased_12m`: 0 gir `INACTIVE`, 1–2 gir
-`OCCASIONAL`, 3–5 gir `ENGAGED`, og 6 eller flere gir `HIGHLY_ENGAGED`.
-Vinduet bruker `purchased_at` i intervallet `[window_start_at, as_of_at)`.
-
-`matches_purchased_12m` er ikke attendance. Plattformen har ingen billettscan-
-eller eventkilde som kan bekrefte oppmøte. `push_opt_in` er en kanalpreferanse,
-ikke marketing consent. Siden Silver bare har siste consent-snapshot, avvises et
-bygg dersom `consent_updated_at` ligger etter valgt `as_of_at`.
-
-Produktet inneholder e-post for direkte målgruppeuttrekk. En reell løsning må
-beskytte dette produktet med tilgangskontroll og dataminimering.
-
-### `match_insights.parquet`
-
-Én rad per kamp med kampfakta, resultat sett fra FK Bodø/Glimt, stadionmetadata
-og været ved kampstart:
-
-| Felt | Beskrivelse |
-|---|---|
-| `match_id`, `kickoff_at` | Kampnøkkel og UTC-avspark |
-| `competition`, `season` | Turnering og sesong |
-| `home_team_name`, `away_team_name` | Lag |
-| `home_score`, `away_score` | Sluttresultat, nullable |
-| `result` | `win`, `draw`, `loss` eller null |
-| `venue_id`, `stadium_name`, `country` | Stadion, nullable |
-| `latitude`, `longitude` | Stadionkoordinater, nullable |
-| `weather_observed_at` | Valgt observasjonstidspunkt, nullable |
-| `temperature_c`, `precipitation_mm`, `wind_speed_ms` | Vær ved kampstart, nullable |
-
-`result` beregnes for team ID `293` og settes bare når kampen er ferdigspilt og
-begge scorer finnes. Kamper der laget ikke deltar, gir null.
-
-Vær velges deterministisk per kamp:
-
-1. Kandidatene må høre til kampens `venue_id`.
-2. Observasjonen må være maksimalt tre timer fra avspark.
-3. Korteste absolutte tidsavstand vinner.
-4. Ved lik avstand foretrekkes tidspunktet før avspark.
-5. Avstand til værstasjon og stasjons-ID brukes som siste tiebreakere.
-
-Deretter pivoteres `air_temperature`, `sum(precipitation_amount PT1H)` og
-`wind_speed` fra det valgte tidspunktet til hver sin kolonne. Alle koblinger er
-venstre joins, slik at kamper uten geokoding eller vær fortsatt er med i
-datasettet med nullable felter.
-
-## Datakvalitet
-
-Bygget stopper med en tydelig feilmelding ved kritiske feil, blant annet:
-
-- manglende eller duplisert `match_id`
-- manglende avsparktid eller lagnavn
-- ugyldige bredde- eller lengdegrader
-- ugyldig Frost-/Nominatim-JSON
-- manglende observation-tid eller element
-- weather values som ikke er numeriske
-
-Gold valideres i tillegg mot Silver:
-
-- `match_id` og `kickoff_at` kan ikke være null
-- `match_id` må være unik
-- Gold må ha samme kamper som Silver
-- joins kan ikke duplisere kamper
-- valgt vær kan ikke ligge mer enn tre timer fra avspark
-- `result` kan bare være `win`, `draw`, `loss` eller null
-- fan activation må ha nøyaktig samme fans som fan-Silver
-- kjøpsmål kan ikke være negative eller ikke-endelige
-- segment og `marketing_allowed` må stemme med beregningsreglene
-- consent-snapshot kan ikke ligge etter valgt `as_of`
-
-Silver bygges deterministisk: uendrede Bronze-filer gir byte-identiske
-Parquet-filer ved gjentatt kjøring i samme miljø. Det samme gjelder Gold for
-uendret Silver.
+Hva hvert steg gjør, hvilke avveiinger som ligger bak og hvilke tall det
+produserer på datasettet i repoet, er dokumentert i
+[docs/architecture.md](docs/architecture.md#pipelinesteg).
+
+## Datasett og datakvalitet
+
+Skjema, nøkkelstrategi og de deterministiske reglene for hvert Silver- og
+Gold-datasett er dokumentert i
+[docs/architecture.md](docs/architecture.md#silver-datasett).
+
+Kort oppsummert:
+
+- Kritiske brudd stopper bygget med en typet exception og tydelig melding.
+- Gold valideres mot Silver: samme kamper, samme fans, ingen dupliserte joins.
+- Beregnede felter valideres mot sine egne regler, så `engagement_segment` og
+  `marketing_allowed` ikke kan komme ut av synk med definisjonen.
+- Uendrede Bronze-filer gir byte-identiske Silver-filer, og uendret Silver gir
+  byte-identisk Gold.
 
 ## Inspiser resultatene
 
@@ -565,7 +323,7 @@ Kjør hele testsuiten uten live API-kall:
 python3 -m unittest discover -s tests -v
 ```
 
-Testene bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
+98 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
 valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
 canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
@@ -609,59 +367,17 @@ git diff --check
 └── README.md
 ```
 
-## Hvorfor dette ikke er produksjonsklart
-
-En virkelig klubbplattform ville kreve langt mer enn denne demonstrasjonen:
-
-- Orkestrering, planlegging, retries og idempotent jobbstyring.
-- Objektlagring, datakatalog, skjemaevolusjon og lineage.
-- Secrets manager og rollebasert tilgangskontroll.
-- Observability med logger, metrics, tracing og varsling.
-- Automatiserte deploys, isolerte miljøer og CI/CD.
-- Avtalte SLA-er, dataeiere, retention og governance.
-- Inkrementelle loads og håndtering av historiske korreksjoner.
-- Mer robust venue-masterdata og manuell håndtering av tvetydige geocodes.
-- Bredere integrasjons- og kontrakttester mot kildeleverandørene.
-- Juridisk vurdering av vilkår, lisenser og eventuell persondata.
-
-Bevisste prototypebegrensninger i dagens kode:
-
-- Kun ett hardkodet lag.
-- Filbasert lagring og caching.
-- Ingen generell konfigurasjon av tidsvinduer eller datakilder.
-- Ingen retries eller distribuert behandling.
-- Første geocoding-resultat velges automatisk.
-- Silver og Gold bygges som full refresh, ikke inkrementelt.
-- Identitetskoblingen bruker bare unik normalisert e-post og håndterer ikke
-	probabilistisk matching, manuell overstyring eller historiske identiteter.
-- Fan activation bruker kjøp som engagement-signal fordi faktisk attendance og
-	app-events ikke finnes i kildedataene.
-- Consent er et siste snapshot, ikke en historisert event- eller SCD-modell.
-- Gold har ingen prediktiv aktiveringsscore eller kamprettet fan-match-modell.
-
-## Mulige neste steg
-
-En naturlig videreføring kan være:
-
-1. Legge pipelinekjøringen i en enkel orchestrator.
-2. Flytte rådata til objektlagring og innføre partisjonering.
-3. Dokumentere arkitektur, data contracts og eierskap i `docs/`.
-4. Legge til CI som kjører tester og bygger Silver og Gold på fixtures.
-5. Innføre eksplisitt lineage mellom kamp, venue, station og observation.
-6. Utvide Gold med flere dataprodukter når konkrete brukere er definert.
-
-Poenget er ikke å legge til flest mulig verktøy, men å la hvert nytt lag løse et
-konkret problem som denne enkle filbaserte prototypen ikke lenger håndterer.
-
 ## Attribution og bruksvilkår
 
 - Geocodingdata kommer fra
-	[OpenStreetMap contributors](https://www.openstreetmap.org/copyright) via
-	Nominatim og er underlagt ODbL og tjenestens usage policy.
+  [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) via
+  Nominatim og er underlagt ODbL og tjenestens usage policy.
 - Historiske værdata og station metadata kommer fra
-	[MET Norway Frost](https://frost.met.no/) og er underlagt MET Norways vilkår
-	og angitt datalisens i API-responsene.
+  [MET Norway Frost](https://frost.met.no/) og er underlagt MET Norways vilkår
+  og angitt datalisens i API-responsene.
 - Kampdata er underlagt vilkårene til FootballData-leverandøren.
+- All supporterdata er syntetisk, se
+  [docs/governance.md](docs/governance.md#syntetiske-data).
 
 Repoet har foreløpig ingen egen `LICENSE`-fil. Legg til en eksplisitt kode-lisens
 før prosjektet distribueres eller gjenbrukes offentlig.
