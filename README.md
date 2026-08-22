@@ -56,8 +56,12 @@ flowchart TD
 		G --> GM[match_insights.parquet]
 		TS[Simulert billettsystem] --> BTS[Bronze: kunder og billettsalg]
 		SA[Simulert supporterapp] --> BAS[Bronze: appbrukere]
-		BTS -. Senere identitetskobling .-> FI[Supporterinnsikt]
-		BAS -. Senere identitetskobling .-> FI
+		BTS --> FS[Fan Silver builder]
+		BAS --> FS
+		FS --> CF[Canonical fans og identities]
+		FS --> CS[Canonical ticket sales]
+		CF -. Senere steg .-> FI[Supporterinnsikt]
+		CS -. Senere steg .-> FI
 		GM -. Senere steg .-> FI
 ```
 
@@ -90,11 +94,14 @@ typet, validert og skrevet som Parquet:
 data/silver/
 ├── matches.parquet
 ├── venues.parquet
-└── weather_observations.parquet
+├── weather_observations.parquet
+├── silver_fans.parquet
+├── silver_fan_identities.parquet
+└── silver_ticket_sales.parquet
 ```
 
-Downstream-kode trenger dermed ikke kjenne JSON-strukturen til FootballData,
-Nominatim eller Frost.
+Downstream-kode trenger dermed ikke kjenne kildestrukturen til FootballData,
+Nominatim, Frost, billettsystemet eller supporterappen.
 
 ### Gold
 
@@ -176,6 +183,7 @@ python3 -m src.fetch_weather
 python3 -m src.build_silver
 python3 -m src.build_gold
 python3 -m src.generate_fan_data
+python3 -m src.build_fan_silver
 ```
 
 ### 1. Hent kamper
@@ -287,8 +295,37 @@ Når `gold.match_insights.parquet` finnes, brukes kampværet til å skape modera
 færre sene kjøp ved dårlig vær. Dette er kun en mekanisme for et meningsfullt
 demonstrasjonsdatasett, ikke produksjonslineage fra Gold til Bronze.
 
-Identitetsoppløsning, supporter-Silver og et analyseklart supporterprodukt i
-Gold kommer i et senere steg og er ikke implementert her.
+Den interne ground truth-identiteten fra generatoren er fortsatt ikke
+tilgjengelig for downstream-steg. Fan-Silver må derfor løse koblingen fra de
+fragmenterte kildefeltene på samme måte som med reelle kildesystemer.
+
+### 7. Bygg canonical fan-Silver
+
+`src/build_fan_silver.py` leser de tre supporterfilene i Bronze og skriver:
+
+```text
+data/silver/
+├── silver_fans.parquet
+├── silver_fan_identities.parquet
+└── silver_ticket_sales.parquet
+```
+
+Identitetskoblingen er bevisst enkel og konservativ. E-post normaliseres med
+trim, små bokstaver og fjerning av `+alias`. En ticket-identitet og en
+app-identitet kobles bare når den normaliserte adressen forekommer nøyaktig én
+gang i hver kilde. Duplikater, manglende e-post og alternative adresser forblir
+separate fans. Dette unngår en falsk sikkerhet om at den enkle prototypen løser
+alle identitetsproblemer.
+
+Med dagens syntetiske Bronze-data blir resultatet:
+
+```text
+Fans:              540 rows, 260 linked across sources
+Fan identities:    800 rows
+Ticket sales:     3771 rows
+```
+
+Supporteranalyse i Gold er fortsatt et senere steg og er ikke implementert.
 
 ## Silver-datasett
 
@@ -334,6 +371,27 @@ velger deterministisk én serie etter:
 4. Første forekomst i kilderesponsen.
 
 Denne regelen er en prototypebeslutning, ikke en universell meteorologisk regel.
+
+### `silver_fans.parquet`
+
+Én rad per canonical fan med stabil `fan_id`, foretrukket normalisert e-post,
+visningsnavn, første observerte tidspunkt og antall koblede kildesystemer.
+ID-en er en deterministisk hash av ticket-identiteten når den finnes, ellers
+app-identiteten. Nye tidligere-sorterende kilderader endrer dermed ikke
+eksisterende fan-ID-er.
+
+### `silver_fan_identities.parquet`
+
+Bridge-tabell mellom `fan_id` og kildenes egne identifikatorer. `source` er
+`ticketing` eller `app`, mens `source_id` beholder original kunde- eller
+appbruker-ID. `match_method` viser om identiteten ble koblet via normalisert
+e-post eller bare representerer én kilde. Bridge-modellen kan senere utvides med
+for eksempel en commerce-identitet.
+
+### `silver_ticket_sales.parquet`
+
+Typet billettsalg med både `fan_id`, original `ticket_customer_id` for lineage
+og `match_id` for kobling til kampdata. Alle salg må ha en gyldig fan og kamp.
 
 ## Gold-datasett
 
@@ -402,6 +460,9 @@ import pandas as pd
 print(pd.read_parquet("data/silver/matches.parquet").head())
 print(pd.read_parquet("data/silver/venues.parquet").head())
 print(pd.read_parquet("data/silver/weather_observations.parquet").head())
+print(pd.read_parquet("data/silver/silver_fans.parquet").head())
+print(pd.read_parquet("data/silver/silver_fan_identities.parquet").head())
+print(pd.read_parquet("data/silver/silver_ticket_sales.parquet").head())
 print(pd.read_parquet("data/gold/match_insights.parquet").head())
 ```
 
@@ -416,7 +477,8 @@ python3 -m unittest discover -s tests -v
 Testene bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
 valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
-deterministiske CSV-filer, datatyper, validering og Parquet-skriving.
+canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
+validering og Parquet-skriving.
 
 Nyttige tilleggskontroller:
 
@@ -442,7 +504,8 @@ git diff --check
 │   ├── fetch_weather.py
 │   ├── build_silver.py
 │   ├── build_gold.py
-│   └── generate_fan_data.py
+│   ├── generate_fan_data.py
+│   └── build_fan_silver.py
 ├── tests/
 ├── .env.example
 ├── requirements.txt
@@ -472,8 +535,9 @@ Bevisste prototypebegrensninger i dagens kode:
 - Ingen retries eller distribuert behandling.
 - Første geocoding-resultat velges automatisk.
 - Silver og Gold bygges som full refresh, ikke inkrementelt.
-- Gold består av ett dataprodukt. Supporterdata finnes bare som syntetiske
-	Bronze-kilder; identitetskobling og supporteranalyse er ikke implementert.
+- Identitetskoblingen bruker bare unik normalisert e-post og håndterer ikke
+	probabilistisk matching, manuell overstyring eller historiske identiteter.
+- Gold består av ett dataprodukt; supporteranalyse er ikke implementert.
 
 ## Mulige neste steg
 
