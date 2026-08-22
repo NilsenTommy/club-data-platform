@@ -541,6 +541,22 @@ print(pd.read_parquet("data/gold/match_insights.parquet").head())
 print(pd.read_parquet("data/gold/fan_activation.parquet").head())
 ```
 
+## Statisk webapp
+
+En minimal visualisering av kampdata, vær og supportersegmenter ligger i
+[`docs/index.html`](docs/index.html). Siden har ingen backend eller eksterne
+JavaScript-avhengigheter og kan forhåndsvises lokalt med:
+
+```bash
+python3 -m http.server 4173 --directory docs
+```
+
+Åpne deretter `http://localhost:4173`. For publisering i GitHub Pages, velg
+**Deploy from a branch**, branchen `main` og mappen `/docs` under
+**Settings > Pages**. Datagrunnlaget er et statisk, aggregert uttrekk i
+`docs/data/visualizations.json` uten persondata. Solgte billetter er tydelig
+merket som proxy fordi faktisk attendance mangler.
+
 ## Tester
 
 Kjør hele testsuiten uten live API-kall:
@@ -571,8 +587,13 @@ git diff --check
 │   ├── silver/
 │   └── gold/
 ├── docs/
-│   ├── architecture.md       # Foreløpig tom
-│   └── governance.md         # Foreløpig tom
+│   ├── data/
+│   │   └── visualizations.json
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   ├── architecture.md
+│   └── governance.md
 ├── src/
 │   ├── fetch_matches.py
 │   ├── geocode_venues.py

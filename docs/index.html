@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Tre enkle visualiseringer av kampdata, vær og supporterengasjement.">
+  <title>Klubbdata | Kamp og supportere</title>
+  <link rel="stylesheet" href="./styles.css?v=2">
+  <script src="./app.js?v=2" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Hovednavigasjon">
+      <a class="brand" href="#top" aria-label="Klubbdata oversikt">
+        <span class="brand__mark" aria-hidden="true">KG</span>
+        <span class="brand__text"><strong>Klubbdata</strong><small>Insights</small></span>
+      </a>
+
+      <nav class="nav">
+        <p class="nav__label">Arbeidsflate</p>
+        <a class="nav__link nav__link--active" href="#top"><span>01</span>Oversikt</a>
+        <a class="nav__link" href="#matches"><span>02</span>Kamper</a>
+        <a class="nav__link" href="#weather"><span>03</span>Vær</a>
+        <a class="nav__link" href="#fans"><span>04</span>Supportere</a>
+      </nav>
+
+      <div class="sidebar__status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span><strong>Datagrunnlag</strong><small>Statisk uttrekk</small></span>
+      </div>
+    </aside>
+
+    <div class="workspace" id="top">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Analyseoversikt</p>
+          <h1>Kamp og supportere</h1>
+        </div>
+        <div class="topbar__meta">
+          <span>Club Data Platform</span>
+          <strong id="updated-at">Laster data …</strong>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="summary" id="summary" aria-label="Nøkkeltall">
+          <p class="loading">Laster datagrunnlag …</p>
+        </section>
+
+        <aside class="data-note">
+          <span class="data-note__accent" aria-hidden="true"></span>
+          <p><strong>Om oppmøtetallene</strong> Fullførte billettkjøp brukes som proxy fordi registrert attendance ikke finnes i kildedataene.</p>
+        </aside>
+
+        <section class="analytics-card attendance-card" id="matches" aria-labelledby="attendance-title">
+          <header class="card-header">
+            <div>
+              <p class="card-kicker">Match performance</p>
+              <h2 id="attendance-title">Solgte billetter per kamp</h2>
+            </div>
+            <span class="card-meta" id="attendance-count">Alle kamper</span>
+          </header>
+          <div id="attendance-chart" class="match-chart" aria-live="polite"></div>
+        </section>
+
+        <div class="insight-grid">
+          <section class="analytics-card" id="weather" aria-labelledby="weather-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Match + vær</p>
+                <h2 id="weather-title">Temperatur og regn</h2>
+              </div>
+              <span class="card-meta" id="weather-count">Målte kamper</span>
+            </header>
+            <div id="weather-chart" class="weather-chart" aria-live="polite"></div>
+          </section>
+
+          <section class="analytics-card" id="fans" aria-labelledby="segments-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Supporterbase</p>
+                <h2 id="segments-title">Engasjementssegmenter</h2>
+              </div>
+              <span class="card-meta" id="segment-count">Alle supportere</span>
+            </header>
+            <div class="segment-frame">
+              <div id="segment-chart" class="segment-chart" aria-live="polite"></div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <p>Klubbdata Insights</p>
+        <p>Bygget på aggregerte Gold- og Silver-data</p>
+      </footer>
+    </div>
+  </div>
+
+  <template id="error-template">
+    <div class="error" role="alert">
+      <strong>Kunne ikke laste visualiseringene.</strong>
+      <span>Kontroller at siden kjøres via en webserver og at datafilen finnes.</span>
+    </div>
+  </template>
+</body>
+</html>
