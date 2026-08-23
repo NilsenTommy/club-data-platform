@@ -207,6 +207,9 @@ def build_matches(
 		)
 
 	frame = pd.DataFrame(rows, columns=MATCH_COLUMNS)
+	frame["kickoff_at"] = pd.to_datetime(
+		frame["kickoff_at"], utc=True, errors="coerce"
+	).astype("datetime64[ns, UTC]")
 	for column in (
 		"match_id",
 		"season",
