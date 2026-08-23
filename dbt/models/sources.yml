@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Curated Silver tables created by the Databricks pipeline.
+    database: clubdata
+    schema: silver
+
+    tables:
+      - name: matches
+        description: One cleaned record per football match.
+
+      - name: venues
+        description: Deduplicated venues with available coordinates.
+
+      - name: weather_observations
+        description: Normalized weather observations used to enrich matches.

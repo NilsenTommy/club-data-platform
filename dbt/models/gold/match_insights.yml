@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: match_insights
+    description: >
+      One row per football match, enriched with venue metadata,
+      club-relative result and the closest valid weather snapshot.
+
+    columns:
+      - name: match_id
+        description: Unique match identifier.
+        data_tests:
+          - not_null
+          - unique
+
+      - name: kickoff_at
+        description: Match kickoff timestamp in UTC.
+        data_tests:
+          - not_null
+
+      - name: result
+        description: Result from the perspective of team ID 293.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - win
+                  - draw
+                  - loss
+
+      - name: venue_id
+        description: Venue identifier when supplied by the match source.
+        data_tests:
+          - relationships:
+              arguments:
+                to: source('silver', 'venues')
+                field: venue_id

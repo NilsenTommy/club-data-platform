@@ -1,0 +1,25 @@
+name: clubdata
+version: "1.0.0"
+config-version: 2
+
+profile: clubdata
+
+model-paths:
+  - models
+
+test-paths:
+  - tests
+
+target-path: target
+
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  clubdata:
+    +materialized: view
+
+    gold:
+      +materialized: table
+      +file_format: delta
