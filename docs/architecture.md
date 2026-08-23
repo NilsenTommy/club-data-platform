@@ -3,7 +3,9 @@
 Teknisk dybdedokumentasjon for [Football Club Data Platform](../README.md).
 Dokumentet beskriver lagdelingen, hvert pipeline-steg, datasettene og de
 konkrete avveiingene som ligger bak. README-en forteller *hvorfor* prosjektet
-finnes — dette dokumentet forteller *hvordan* det er bygget.
+finnes — dette dokumentet forteller *hvordan* det er bygget. Både den
+opprinnelige lokale pandas/Parquet-implementasjonen og cloud-utvidelsen på AWS
+S3 og Databricks er dokumentert.
 
 > Dette er en prototype. Beslutningene under er tatt for å demonstrere prinsipper
 > med minst mulig verktøykjede, ikke for å tåle produksjonslast.
@@ -12,13 +14,13 @@ finnes — dette dokumentet forteller *hvordan* det er bygget.
 
 1. [Designprinsipper](#designprinsipper)
 2. [Lagdeling](#lagdeling)
-3. [Pipelinesteg](#pipelinesteg)
-4. [Silver-datasett](#silver-datasett)
-5. [Gold-datasett](#gold-datasett)
-6. [Determinisme og datakvalitet](#determinisme-og-datakvalitet)
-7. [Avveiinger](#avveiinger)
-8. [Kjente begrensninger](#kjente-begrensninger)
-9. [Veikart](#veikart)
+3. [Cloud-arkitektur](#cloud-arkitektur)
+4. [Pipelinesteg](#pipelinesteg)
+5. [Silver-datasett](#silver-datasett)
+6. [Gold-datasett](#gold-datasett)
+7. [Determinisme og datakvalitet](#determinisme-og-datakvalitet)
+8. [Avveiinger](#avveiinger)
+9. [Kjente begrensninger](#kjente-begrensninger)
 
 ---
 
@@ -34,6 +36,10 @@ finnes — dette dokumentet forteller *hvordan* det er bygget.
 | **Konservativ heller enn imponerende** | Der prototypen ikke kan avgjøre noe trygt (identitet, samtykke, geokoding), lar den saken være uløst i stedet for å gjette. |
 
 ## Lagdeling
+
+Lagdelingen finnes i to implementasjoner. Den lokale referanseimplementasjonen
+bruker filsystem, pandas og Parquet og dekker både kamp- og supporterdomenet.
+Cloud-utvidelsen bruker S3, Spark og Delta Lake og dekker foreløpig kampdomenet.
 
 ### Bronze — kildesystemenes sannhet
 
@@ -89,9 +95,65 @@ data/gold/
 Hvert produkt har én definert konsumentsituasjon og ett grain. Produkter som
 ikke har en identifisert bruker, er bevisst ikke bygget.
 
+## Cloud-arkitektur
+
+```mermaid
+flowchart LR
+  S3[AWS S3 raw landing] --> EL[Unity Catalog external location<br/>read-only]
+  EL --> V[External volume<br/>/Volumes/clubdata/bronze/landing_s3]
+  V --> B[Bronze Delta]
+  B --> S[Silver Delta]
+  S --> G[dbt Gold Delta]
+  G --> DQ[Datakvalitetskontroller]
+  LJ[Lakeflow Jobs] -. orkestrerer .-> B
+  LJ -.-> S
+  LJ -.-> G
+  LJ -.-> DQ
+  CI[GitHub Actions CI] -. compile, tester og dbt parse .-> R[Repo-kode]
+  R -. main, manuelt styrt .-> LJ
+```
+
+### Raw landing i S3
+
+Den private bøtten `clubdata-platform-landing-portfolio` er landing zone for 34
+råfiler fra kampdomenet:
+
+| Kilde/filtype | Antall |
+|---|---:|
+| FootballData | 1 |
+| Nominatim | 11 |
+| Frost sources | 14 |
+| Frost observations | 8 |
+| **Totalt** | **34** |
+
+Supporterdata er med vilje ikke flyttet til S3. Bøtten har Block Public Access,
+Bucket Owner Enforced, SSE-S3 og versjonering. Lifecycle sletter gamle
+ikke-gjeldende objektversjoner etter 30 dager, beholder to nyere
+ikke-gjeldende versjoner og avbryter ufullstendige multipart-opplastinger etter
+7 dager.
+
+### Databricks lakehouse
+
+Unity Catalog external location `clubdata_landing_s3` gir read-only tilgang til
+landing-bøtten. Dataene eksponeres i det eksterne volumet
+`/Volumes/clubdata/bronze/landing_s3`; transformasjonsstegene skriver ikke
+tilbake til raw landing.
+
+Notebookene i `databricks/notebooks/` bygger Bronze og Silver som Delta-tabeller
+med Apache Spark. Gold `match_insights` materialiseres som en Delta-tabell av
+dbt-prosjektet i `dbt/`, etterfulgt av datakvalitetskontroller. Lakeflow Jobs
+orkestrerer notebook- og dbt-stegene i denne rekkefølgen.
+
+GitHub Actions-workflowen i `.github/workflows/` er CI: den kjører compile-
+kontroll og 98 unit-tester på Python 3.9 og 3.12 samt offline `dbt parse`.
+Workflowen deployer ikke kode og starter ikke Lakeflow-jobben. Databricks-jobben
+leser `main`, men kjøring og konfigurasjon er foreløpig manuelt styrt. S3, IAM
+og Unity Catalog er også opprettet manuelt; Terraform og Databricks Asset
+Bundles er naturlige neste steg for IaC og deploy.
+
 ## Pipelinesteg
 
-Kommandoene kjøres fra repo-roten i denne rekkefølgen:
+Den lokale referanseimplementasjonen kjøres fra repo-roten i denne rekkefølgen:
 
 ```bash
 python3 -m src.fetch_matches
@@ -445,8 +507,10 @@ validering og Parquet-skriving.
 
 | Valg | Alternativ | Hvorfor dette valget |
 |---|---|---|
-| Filbasert Bronze med hash i filnavn | Database eller objektlagring med versjonering | Gjør rådata inspiserbare i en editor og gir gratis idempotens. Objektlagring er neste steg når volumet vokser. |
-| Parquet + pandas | DuckDB, Spark, dbt | Datasettet er lite. Å innføre en motor uten et problem å løse ville skjult prinsippene bak verktøy. |
+| Lokal filbasert Bronze med hash i filnavn | Bare cloud-basert lagring | Beholder en inspiserbar, kjørbar referanseimplementasjon ved siden av den versjonerte S3-landingen. |
+| Lokal Parquet + pandas og cloud Spark + Delta + dbt | Erstatte lokal implementasjon | Den lokale flyten viser transformasjonslogikken med få avhengigheter; cloud-utvidelsen viser katalog, tabellformat, SQL-modellering og orkestrering. |
+| Read-only external location | Skrivetilgang til raw landing fra Databricks | Bevarer rådata som mottatt og hindrer transformasjonssteg i å mutere landingssonen. |
+| Manuelt opprettet cloud-infrastruktur | IaC fra første prototype | Verifiserer arkitekturen med liten oppstartskostnad; Terraform og Databricks Asset Bundles er neste steg for repeterbarhet. |
 | Eksplisitt validering i Python | Great Expectations, Pandera | Får fram *hva* som valideres og hvorfor, uten et rammeverk å lære seg først. Et rammeverk lønner seg når reglene deles på tvers av team. |
 | Full refresh av Silver og Gold | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementell load krever watermark, sen ankomst og korreksjonshåndtering — reell kompleksitet uten reell gevinst her. |
 | Deterministisk regelbasert identitetskobling | Probabilistisk matching / ML | En konservativ regel er forklarbar og reviderbar. Et sannsynlighetsscore uten fasit ville gitt tall ingen kan etterprøve. |
@@ -460,9 +524,12 @@ validering og Parquet-skriving.
 Bevisste prototypebegrensninger i dagens kode:
 
 - Kun ett hardkodet lag (`293`).
-- Filbasert lagring og caching, ingen objektlagring eller katalog.
+- Den lokale implementasjonen er fortsatt filbasert; cloud-utvidelsen dekker
+  foreløpig bare kampdomenet, ikke supporterdata.
 - Ingen generell konfigurasjon av tidsvinduer eller datakilder.
-- Ingen retries, orkestrering eller distribuert behandling.
+- Lakeflow Jobs orkestrerer cloud-flyten, men kjøring og konfigurasjon er manuelt
+  styrt og har ikke automatisk CD fra GitHub.
+- S3, IAM og Unity Catalog mangler IaC og er opprettet manuelt.
 - Første geocoding-resultat velges automatisk, uten manuell kvalitetssikring.
 - Silver og Gold bygges som full refresh.
 - Identitetskoblingen bruker bare unik normalisert e-post, og håndterer ikke
