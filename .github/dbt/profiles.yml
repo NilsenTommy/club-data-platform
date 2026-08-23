@@ -1,0 +1,12 @@
+clubdata:
+  target: ci
+
+  outputs:
+    ci:
+      type: databricks
+      host: example.cloud.databricks.com
+      http_path: /sql/1.0/warehouses/0000000000000000
+      token: ci-placeholder
+      catalog: clubdata
+      schema: dbt_ci
+      threads: 1
