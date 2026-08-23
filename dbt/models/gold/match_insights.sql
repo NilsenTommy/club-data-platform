@@ -28,6 +28,7 @@ weather_candidates as (
 
     select distinct
         m.match_id,
+        w.venue_id,
         m.kickoff_at,
         w.weather_station_id,
         w.observed_at,
@@ -69,6 +70,7 @@ selected_weather as (
 
     select
         match_id,
+        venue_id,
         weather_station_id,
         observed_at
     from ranked_weather_candidates
@@ -106,8 +108,9 @@ weather_snapshots as (
 
     from selected_weather as selected
     inner join weather_observations as observations
-        on selected.weather_station_id = observations.weather_station_id
-       and selected.observed_at = observations.observed_at
+    on selected.venue_id = observations.venue_id
+   and selected.weather_station_id = observations.weather_station_id
+   and selected.observed_at = observations.observed_at
 
     group by
         selected.match_id,
