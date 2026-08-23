@@ -287,12 +287,14 @@ def build_fans_and_identities(
 	identities = pd.DataFrame(identity_rows, columns=FAN_IDENTITY_COLUMNS)
 	for column in ("fan_id", "primary_email", "display_name"):
 		fans[column] = fans[column].astype("string")
-	fans["first_seen_at"] = pd.to_datetime(fans["first_seen_at"], utc=True)
+	fans["first_seen_at"] = pd.to_datetime(
+		fans["first_seen_at"], utc=True
+	).astype("datetime64[ns, UTC]")
 	fans["source_count"] = pd.to_numeric(fans["source_count"]).astype("Int64")
 	fans["marketing_consent"] = fans["marketing_consent"].astype("boolean")
 	fans["consent_updated_at"] = pd.to_datetime(
 		fans["consent_updated_at"], utc=True, errors="coerce"
-	)
+	).astype("datetime64[ns, UTC]")
 	fans["activation_eligible"] = fans["activation_eligible"].astype("boolean")
 	for column in FAN_IDENTITY_COLUMNS:
 		identities[column] = identities[column].astype("string")
@@ -376,7 +378,9 @@ def build_ticket_sales(
 		)
 	frame["quantity"] = quantity.astype("Int64")
 	frame["unit_price_nok"] = unit_price.astype("Float64")
-	frame["purchased_at"] = pd.to_datetime(frame["purchased_at"], utc=True, errors="coerce")
+	frame["purchased_at"] = pd.to_datetime(
+		frame["purchased_at"], utc=True, errors="coerce"
+	).astype("datetime64[ns, UTC]")
 	frame = frame.sort_values("ticket_sale_id", kind="stable").reset_index(drop=True)
 	validate_ticket_sales(frame, matches)
 	return frame
