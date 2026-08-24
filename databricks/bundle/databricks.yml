@@ -1,0 +1,19 @@
+bundle:
+  name: club_data_platform
+
+include:
+  - resources/*.yml
+
+sync:
+  paths:
+    - ../notebooks
+    - ../../dbt
+
+variables:
+  sql_warehouse_id:
+    description: SQL warehouse used by the dbt task
+
+targets:
+  dev:
+    mode: development
+    default: true
