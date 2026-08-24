@@ -124,6 +124,9 @@ Frost observation-responser. Block Public Access, Bucket Owner Enforced,
 SSE-S3 og versjonering er aktivert. Lifecycle-reglene sletter gamle
 ikke-gjeldende versjoner etter 30 dager, beholder to nyere ikke-gjeldende
 versjoner og avbryter ufullstendige multipart-opplastinger etter 7 dager.
+Selve bøtten og sikkerhetskonfigurasjonen administreres nå med Terraform. Den
+eksisterende bøtten ble importert, ikke gjenskapt; etter apply viste en ny plan
+`0 add, 0 change, 0 destroy`. Lokal state er ignorert og ikke committet.
 
 Databricks eksponerer bøtten gjennom den read-only external location-en
 `clubdata_landing_s3` og Unity Catalog-volumet
@@ -222,7 +225,7 @@ Spark, Delta, dbt og orkestrering.
 | Ikke bygget | Hvorfor ikke | Når det ville lønt seg |
 |---|---|---|
 | Automatisk CD | GitHub Actions validerer kode, men deployer eller starter ikke Databricks-jobben | Når deploy og jobbstart kan automatiseres med tydelig miljø- og godkjenningsmodell |
-| Infrastructure as Code | S3, IAM og Unity Catalog er opprettet manuelt | Terraform og Databricks Asset Bundles er naturlige neste steg |
+| Komplett Infrastructure as Code | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, mens IAM, Databricks storage credential, external location, external volume og Lakeflow-jobben fortsatt administreres manuelt | Terraform og Databricks Asset Bundles er neste steg for de gjenværende ressursene |
 | Valideringsrammeverk | Eksplisitt Python viser *hva* som valideres og hvorfor, uten et rammeverk å lære først | Når reglene skal deles og håndheves på tvers av team |
 | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
 | Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
@@ -371,7 +374,9 @@ canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
 fan-segmentering, consent-aware aktivering, validering og Parquet-skriving.
 
 GitHub Actions kjører compile-kontroll og alle 98 testene på både Python 3.9 og
-3.12. En separat jobb kjører offline `dbt parse`. Dette er CI, ikke full CD:
+3.12. Separate jobber kjører offline `dbt parse` og Terraform-formatkontroll,
+`init -backend=false` og `validate` uten AWS-credentials. Automatisk
+Terraform-plan og apply er ikke implementert. Dette er CI, ikke full CD:
 workflowen deployer ikke og starter ikke Databricks-jobben. Jobben leser
 `main`, men kjøring og konfigurasjon er foreløpig manuelt styrt.
 
@@ -403,6 +408,9 @@ git diff --check
 ├── dbt/
 │   ├── models/
 │   └── tests/
+├── infra/
+│   └── terraform/
+│       └── aws-s3/
 ├── .github/
 │   └── workflows/
 ├── src/

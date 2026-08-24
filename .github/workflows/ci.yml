@@ -78,3 +78,30 @@ jobs:
           --profiles-dir .github/dbt
           --target ci
           --no-partial-parse
+
+  terraform-validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: infra/terraform/aws-s3
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Terraform
+        run: terraform init -backend=false -input=false
+
+      - name: Validate Terraform
+        run: terraform validate
