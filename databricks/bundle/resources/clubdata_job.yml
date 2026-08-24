@@ -1,0 +1,59 @@
+resources:
+  jobs:
+    clubdata_match_insights_pipeline:
+      name: clubdata_match_insights_pipeline
+      max_concurrent_runs: 1
+      performance_target: PERFORMANCE_OPTIMIZED
+      queue:
+        enabled: true
+      environments:
+        - environment_key: dbt-default
+          spec:
+            environment_version: "5"
+            dependencies:
+              - dbt-databricks>=1.0.0,<2.0.0
+      tasks:
+        - task_key: bronze_matches
+          notebook_task:
+            notebook_path: ../../notebooks/01_bronze_matches.ipynb
+            source: WORKSPACE
+
+        - task_key: bronze_reference_data
+          notebook_task:
+            notebook_path: ../../notebooks/02_bronze_reference_data.ipynb
+            source: WORKSPACE
+
+        - task_key: silver_matches_and_venues
+          depends_on:
+            - task_key: bronze_reference_data
+            - task_key: bronze_matches
+          notebook_task:
+            notebook_path: ../../notebooks/03_silver_matches.ipynb
+            source: WORKSPACE
+
+        - task_key: silver_weather
+          depends_on:
+            - task_key: silver_matches_and_venues
+          notebook_task:
+            notebook_path: ../../notebooks/04_silver_weather.ipynb
+            source: WORKSPACE
+
+        - task_key: gold_match_insights
+          depends_on:
+            - task_key: silver_weather
+          dbt_task:
+            project_directory: ../../../dbt
+            commands:
+              - dbt build
+            catalog: clubdata
+            schema: gold
+            warehouse_id: ${var.sql_warehouse_id}
+            source: WORKSPACE
+          environment_key: dbt-default
+
+        - task_key: data_quality_checks
+          depends_on:
+            - task_key: gold_match_insights
+          notebook_task:
+            notebook_path: ../../notebooks/06_validate_pipeline.ipynb
+            source: WORKSPACE
