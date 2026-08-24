@@ -93,7 +93,22 @@ forskjellen mellom `k=4` og `k=2`, syntetiske data og manglende dokumentasjon av
 forretningseffekt gir ikke grunnlag for operativ bruk. Det er ikke opprettet
 modellregistrering, serving endpoint eller automatiserte supporterbeslutninger.
 
-## Krav før produksjon
+## Publisert snapshot
+
+Notebooken samler det aggregerte resultatet i én PII-fri fil og kan logge den som
+MLflow-artefakten `portfolio_summary.json`. En verifisert fil promoteres manuelt
+til `data/ml/fan_segmentation_summary.json`, som er kilden bak ML-visningen på
+porteføljesiden. Snapshotet inneholder kandidatmålinger, segmentprofiler med
+medianer, krysstabellen mot `rule_segment`, guardrail-status og beslutningen.
+Det inneholder ingen `fan_id`, navn, e-post, kontaktdata eller samtykkefelter,
+og porteføljesiden gjør ingen kall til Databricks eller MLflow.
+
+Det publiserte snapshotet er kontrollert ved lokal reproduksjon på datasnapshotet
+fra 22. august 2026. `promotion.source` er derfor `local_reproduction`, og
+`selectionRunId` står som `null`. Eksporten avviser et snapshot merket
+`mlflow_artifact` dersom run-ID mangler.
+
+## Krav f\u00f8r produksjon
 
 Før en segmenteringsmodell kan vurderes for reell bruk, må minst følgende være
 på plass:

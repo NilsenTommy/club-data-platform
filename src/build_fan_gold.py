@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SILVER_DIR = PROJECT_ROOT / "data" / "silver"
 GOLD_DIR = PROJECT_ROOT / "data" / "gold"
 FAN_ACTIVATION_OUTPUT = GOLD_DIR / "fan_activation.parquet"
+FAN_SEGMENT_SUMMARY_OUTPUT = GOLD_DIR / "fan_segment_summary.parquet"
 
 SEGMENT_VALUES = ("INACTIVE", "OCCASIONAL", "ENGAGED", "HIGHLY_ENGAGED")
 SALE_STATUS_VALUES = ("completed", "cancelled", "refunded")
@@ -48,6 +49,20 @@ FAN_ACTIVATION_COLUMNS = [
 	"marketing_consent",
 	"consent_updated_at",
 	"marketing_allowed",
+]
+FAN_SEGMENT_SUMMARY_COLUMNS = [
+	"engagement_segment",
+	"as_of_at",
+	"window_start_at",
+	"fan_count",
+	"consent_granted_count",
+	"consent_declined_count",
+	"consent_unknown_count",
+	"activatable_count",
+	"matches_purchased_median",
+	"purchase_transactions_median",
+	"tickets_purchased_median",
+	"total_spend_median",
 ]
 ADDITIVE_COLUMNS = (
 	"matches_purchased_12m",
@@ -325,6 +340,97 @@ def validate_fan_activation(
 			)
 
 
+def build_fan_segment_summary(frame: pd.DataFrame) -> pd.DataFrame:
+	validate_fan_activation(frame)
+	if frame.empty:
+		raise FanGoldBuildError("Fan segment summary requires at least one fan.")
+
+	rows = []
+	for segment in SEGMENT_VALUES:
+		selection = frame[frame["engagement_segment"].eq(segment)]
+		consent = selection["marketing_consent"].astype("boolean")
+		rows.append(
+			{
+				"engagement_segment": segment,
+				"as_of_at": frame["as_of_at"].iloc[0],
+				"window_start_at": frame["window_start_at"].iloc[0],
+				"fan_count": len(selection),
+				"consent_granted_count": int(consent.eq(True).sum()),
+				"consent_declined_count": int(consent.eq(False).sum()),
+				"consent_unknown_count": int(consent.isna().sum()),
+				"activatable_count": int(
+					selection["marketing_allowed"].astype("boolean").eq(True).sum()
+				),
+				"matches_purchased_median": selection["matches_purchased_12m"].median(),
+				"purchase_transactions_median": selection[
+					"purchase_transactions_12m"
+				].median(),
+				"tickets_purchased_median": selection["tickets_purchased_12m"].median(),
+				"total_spend_median": selection["total_spend_12m"].median(),
+			}
+		)
+
+	summary = pd.DataFrame(rows, columns=FAN_SEGMENT_SUMMARY_COLUMNS)
+	for column in (
+		"fan_count",
+		"consent_granted_count",
+		"consent_declined_count",
+		"consent_unknown_count",
+		"activatable_count",
+	):
+		summary[column] = summary[column].astype("Int64")
+	for column in (
+		"matches_purchased_median",
+		"purchase_transactions_median",
+		"tickets_purchased_median",
+		"total_spend_median",
+	):
+		summary[column] = summary[column].astype("Float64")
+	validate_fan_segment_summary(summary, expected_fans=len(frame))
+	return summary
+
+
+def validate_fan_segment_summary(frame: pd.DataFrame, expected_fans: int = None) -> None:
+	if list(frame.columns) != FAN_SEGMENT_SUMMARY_COLUMNS:
+		raise FanGoldBuildError("Fan segment summary has an unexpected schema.")
+	if frame["engagement_segment"].duplicated().any() or set(
+		frame["engagement_segment"]
+	) != set(SEGMENT_VALUES):
+		raise FanGoldBuildError(
+			"Fan segment summary must contain one row for every engagement segment."
+		)
+	count_columns = (
+		"fan_count",
+		"consent_granted_count",
+		"consent_declined_count",
+		"consent_unknown_count",
+		"activatable_count",
+	)
+	if frame[list(count_columns)].isna().any().any() or (
+		frame[list(count_columns)] < 0
+	).any().any():
+		raise FanGoldBuildError("Fan segment summary counts must be non-negative.")
+	consent_total = frame[
+		["consent_granted_count", "consent_declined_count", "consent_unknown_count"]
+	].sum(axis=1)
+	if not consent_total.equals(frame["fan_count"]):
+		raise FanGoldBuildError("Fan segment summary consent counts do not reconcile.")
+	if (frame["activatable_count"] > frame["consent_granted_count"]).any():
+		raise FanGoldBuildError(
+			"Fan segment summary activatable count exceeds granted consent."
+		)
+	if expected_fans is not None and int(frame["fan_count"].sum()) != expected_fans:
+		raise FanGoldBuildError(
+			f"Fan segment summary covers {int(frame['fan_count'].sum())} fans, "
+			f"expected {expected_fans}."
+		)
+	for column in ("as_of_at", "window_start_at"):
+		if frame[column].isna().any() or frame[column].nunique() != 1:
+			raise FanGoldBuildError(
+				f"Fan segment summary {column} must contain one shared timestamp."
+			)
+
+
 def write_fan_activation(
 	frame: pd.DataFrame,
 	output_dir: Path = GOLD_DIR,
@@ -335,6 +441,19 @@ def write_fan_activation(
 		frame.to_parquet(path, index=False, engine="pyarrow")
 	except (OSError, ImportError, ValueError) as error:
 		raise FanGoldBuildError(f"Could not write fan activation Gold: {error}") from error
+	return path
+
+
+def write_fan_segment_summary(
+	frame: pd.DataFrame,
+	output_dir: Path = GOLD_DIR,
+) -> Path:
+	output_dir.mkdir(parents=True, exist_ok=True)
+	path = output_dir / FAN_SEGMENT_SUMMARY_OUTPUT.name
+	try:
+		frame.to_parquet(path, index=False, engine="pyarrow")
+	except (OSError, ImportError, ValueError) as error:
+		raise FanGoldBuildError(f"Could not write fan segment summary Gold: {error}") from error
 	return path
 
 
@@ -355,7 +474,9 @@ def main(argv=None) -> int:
 		as_of = parse_as_of(arguments.as_of)
 		fans, ticket_sales = load_fan_silver()
 		activation = build_fan_activation(fans, ticket_sales, as_of)
-		path = write_fan_activation(activation)
+		summary = build_fan_segment_summary(activation)
+		activation_path = write_fan_activation(activation)
+		summary_path = write_fan_segment_summary(summary)
 	except FanGoldBuildError as error:
 		print(f"Error: {error}", file=sys.stderr)
 		return 1
@@ -364,7 +485,8 @@ def main(argv=None) -> int:
 	print(f"Marketing allowed: {int(activation['marketing_allowed'].sum())}")
 	print(f"\nSegments:\n{activation['engagement_segment'].value_counts().to_string()}")
 	print("\nWritten:")
-	print(path.relative_to(PROJECT_ROOT))
+	print(activation_path.relative_to(PROJECT_ROOT))
+	print(summary_path.relative_to(PROJECT_ROOT))
 	return 0
 
 

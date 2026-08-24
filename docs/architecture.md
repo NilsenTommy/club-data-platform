@@ -88,8 +88,10 @@ Gold bygges utelukkende fra Silver og gjør ingen API-kall.
 
 ```text
 data/gold/
-├── match_insights.parquet     én rad per kamp
-└── fan_activation.parquet     én rad per canonical fan
+├── match_insights.parquet        én rad per kamp
+├── match_ticket_sales.parquet    én rad per kamp
+├── fan_activation.parquet        én rad per canonical fan
+└── fan_segment_summary.parquet   én rad per engasjementssegment
 ```
 
 Hvert produkt har én definert konsumentsituasjon og ett grain. Produkter som
@@ -156,7 +158,8 @@ med `SUCCESS`. Deployen bandt ikke til og endret ikke den eksisterende
 hovedjobben.
 
 GitHub Actions-workflowen i `.github/workflows/` er CI: den kjører compile-
-kontroll og 98 unit-tester på Python 3.9 og 3.12, offline `dbt parse` og
+kontroll og 159 unit-tester på Python 3.9 og 3.12, `--check` av publisert
+porteføljedata, syntakssjekk av frontend, offline `dbt parse` og
 Terraform-formatkontroll, `init -backend=false` og `validate` uten
 AWS-credentials. Automatisk Terraform-plan og apply er ikke implementert.
 Bundlen er validert og testkjørt lokalt med autentisert Databricks CLI, men
@@ -182,6 +185,7 @@ python3 -m src.build_silver
 python3 -m src.build_gold
 python3 -m src.generate_fan_data
 python3 -m src.build_fan_silver
+python3 -m src.build_ticket_gold
 python3 -m src.build_fan_gold --as-of 2026-08-22
 ```
 
@@ -317,11 +321,20 @@ Activation eligible: 278 rows
 Ticketing er autoritativ kilde for `marketing_consent`. App-only og uløste
 appidentiteter får **ukjent** samtykke, ikke et implisitt avslag.
 
-### 8. Bygg fan activation-Gold — `src/build_fan_gold.py`
+### 8. Bygg kampbasert billett-Gold — `src/build_ticket_gold.py`
+
+Leser kamper og canonical billettsalg fra Silver og skriver
+`data/gold/match_ticket_sales.parquet`. Produktet har én rad per kamp. Bare
+`completed`-transaksjoner teller i `completed_transactions`, `tickets_sold` og
+`gross_sales_nok`; kansellerte og refunderte transaksjoner gir ingen verdi i
+disse målene.
+
+### 9. Bygg supporter-Gold — `src/build_fan_gold.py`
 
 Leser canonical fans og billettsalg fra Silver og skriver
-`data/gold/fan_activation.parquet`. En eksplisitt `--as-of`-dato gjør
-12-månedersvinduet og outputen reproduserbar.
+`data/gold/fan_activation.parquet` og den PII-frie
+`data/gold/fan_segment_summary.parquet`. En eksplisitt `--as-of`-dato gjør
+12-månedersvinduet og outputene reproduserbare.
 
 ```text
 Fans:              540 rows
@@ -441,6 +454,20 @@ fortsatt er med med nullable felter. Joinene bruker pandas `validate="many_to_on
 mot venues og `"one_to_one"` mot vær; en `MergeError` kastes videre som
 `GoldBuildError`.
 
+### `match_ticket_sales.parquet`
+
+Én rad per kamp med disse gjenbrukbare målene:
+
+| Felt | Beskrivelse |
+|---|---|
+| `match_id` | Kampnøkkel |
+| `completed_transactions` | Antall salg med `status = completed` |
+| `tickets_sold` | Sum `quantity` for fullførte salg |
+| `gross_sales_nok` | Sum `quantity * unit_price_nok` for fullførte salg |
+
+Alle kampene beholdes, også når de ikke har fullførte salg. Produktet inneholder
+ingen supporter-, kunde- eller transaksjonsidentifikatorer.
+
 ### `fan_activation.parquet`
 
 Én rad per canonical fan, også for fans uten kjøp eller marketing-tillatelse.
@@ -462,6 +489,20 @@ mot venues og `"one_to_one"` mot vær; en `MergeError` kastes videre som
 Segmentet bygger på `matches_purchased_12m`: 0 gir `INACTIVE`, 1–2 gir
 `OCCASIONAL`, 3–5 gir `ENGAGED`, 6 eller flere gir `HIGHLY_ENGAGED`. Vinduet
 bruker `purchased_at` i intervallet `[window_start_at, as_of_at)`.
+
+### `fan_segment_summary.parquet`
+
+Én rad per engasjementssegment med antall supportere, samtykke ja/nei/ukjent,
+antall som kan kontaktes og medianer for kamper, transaksjoner, billetter og
+forbruk. Produktet inneholder ingen `fan_id`, e-post eller visningsnavn og er
+det eneste supporterproduktet som leses av den offentlige porteføljeeksporten.
+
+### Porteføljeeksport — `src/export_portfolio_data.py`
+
+Eksporten er et serveringssteg, ikke et nytt medallion-lag. Den leser bare de
+PII-frie Gold-produktene og det aggregerte ML-snapshotet, legger på norske
+etiketter og frontendstruktur, validerer at forbudte felt og e-postadresser ikke
+finnes, og skriver deterministisk `docs/data/portfolio.json` for GitHub Pages.
 
 Tre presiseringer som er lette å ta feil av:
 
@@ -510,7 +551,7 @@ Bygget stopper med en typet exception og tydelig melding ved kritiske feil:
 
 ### Tester
 
-98 tester kjører uten live API-kall, med mocks og midlertidige mapper:
+159 tester kjører uten live API-kall, med mocks og midlertidige mapper:
 
 ```bash
 python3 -m unittest discover -s tests -v

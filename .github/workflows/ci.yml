@@ -50,6 +50,24 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Verify published portfolio data is up to date
+        run: python -m src.export_portfolio_data --check
+
+  frontend-check:
+    name: Check frontend syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Check JavaScript syntax
+        run: node --check docs/app.js
+
+      - name: Check published data is valid JSON
+        run: node --input-type=module -e "import fs from 'node:fs'; JSON.parse(fs.readFileSync('docs/data/portfolio.json', 'utf8'));"
+
   dbt-parse:
     name: Parse dbt project
     runs-on: ubuntu-latest

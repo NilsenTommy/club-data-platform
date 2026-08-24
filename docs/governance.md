@@ -79,7 +79,10 @@ personidentifiserende felter med vilje ikke er flyttet dit.
 | `silver_fan_identities` | Kildens egne ID-er | Nødvendig for lineage tilbake til kildesystemet |
 | `silver_ticket_sales` | `fan_id`, `ticket_customer_id` | Pseudonym kobling; ingen kontaktfelter |
 | `fan_activation` | `primary_email`, `display_name` | Nødvendig for direkte målgruppeuttrekk |
-| `docs/data/visualizations.json` | Ingen | Kun aggregerte tall for den statiske webappen |
+| `match_ticket_sales` | Ingen | Aggregerte billettmål per kamp |
+| `fan_segment_summary` | Ingen | Aggregerte supporter- og samtykketall per segment |
+| `docs/data/portfolio.json` | Ingen | Kun aggregerte tall for den statiske webappen; `assert_publishable` blokkerer publisering hvis et forbudt felt eller en e-postadresse dukker opp |
+| `data/ml/fan_segmentation_summary.json` | Ingen | Aggregert resultat av segmenteringseksperimentet: kandidatmålinger, segmentprofiler, krysstabell og guardrail-status. Ingen `fan_id`, navn, e-post eller samtykkefelter |
 
 ### Anvendte tiltak
 
@@ -94,8 +97,9 @@ personidentifiserende felter med vilje ikke er flyttet dit.
   multipart-opplastinger avbrytes etter 7 dager.
 - **Pseudonyme nøkler nedstrøms.** `silver_ticket_sales` bærer `fan_id`, ikke
   kontaktfelter. Atferdsanalyse krever dermed ikke tilgang til e-post.
-- **Aggregering før publisering.** Datagrunnlaget til den statiske webappen er et
-  aggregert uttrekk uten persondata.
+- **Aggregering før publisering.** Porteføljeeksporten leser bare
+  `match_insights`, `match_ticket_sales`, `fan_segment_summary` og det
+  aggregerte ML-snapshotet. Den åpner aldri `fan_activation` med kontaktfelt.
 - **Ingen ground truth-identitet i rådata.** Generatorens interne person-ID
   skrives aldri til Bronze.
 
@@ -200,8 +204,10 @@ Dette er gapene jeg ville tatt tak i først, i denne rekkefølgen.
 Prioriteringen følger risiko, ikke teknisk interesse: tilgang til persondata før
 skjemagarantier, og sletteflyt før lineage.
 
-GitHub Actions kjører CI med compile-kontroll, 98 unit-tester på Python 3.9 og
-3.12, offline `dbt parse` og Terraform-formatkontroll, `init -backend=false` og
+GitHub Actions kjører CI med compile-kontroll, 159 unit-tester på Python 3.9 og
+3.12, `python -m src.export_portfolio_data --check` for å hindre at publisert
+datagrunnlag driver fra kilden, syntakssjekk av `docs/app.js`, offline
+`dbt parse` og Terraform-formatkontroll, `init -backend=false` og
 `validate` uten AWS-credentials. Automatisk Terraform-plan og apply er ikke
 implementert. Bundlen er validert og den separate dev-jobbens seks-task-kjede
 er kjørt med `SUCCESS` lokalt via autentisert Databricks CLI, uten å binde til

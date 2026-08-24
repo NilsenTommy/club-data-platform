@@ -19,8 +19,8 @@ er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
 |---|---|
 | **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
 | **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Terraform, Databricks, Databricks Asset Bundles / Databricks Declarative Automation Bundles, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow, GitHub Actions |
-| **Omfang** | 3 eksterne API-er · 8 eksisterende pipeline-steg + 1 isolert ML-featuresteg · 6 Silver-datasett · 2 Gold-dataprodukter · 113 tester |
-| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 113 tester |
+| **Omfang** | 3 eksterne API-er · 9 pipeline-steg + 1 isolert ML-featuresteg · 6 Silver-datasett · 4 Gold-dataprodukter · 159 tester |
+| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 159 tester |
 | **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
 | **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) · [ML- og AI-strategi](docs/ml-ai-strategy.md) |
 
@@ -93,6 +93,10 @@ flowchart TD
 		CF --> FG[Fan Gold builder]
 		CS --> FG
 		FG --> FA[fan_activation.parquet]
+		FG --> FSS[fan_segment_summary.parquet]
+		SM --> TG[Ticket Gold builder]
+		CS --> TG
+		TG --> MTS[match_ticket_sales.parquet]
 		GM -. Senere fan-match-produkt .-> FI[Matchrettet aktivering]
 ```
 
@@ -146,7 +150,7 @@ eksisterende hovedjobben ble verken bundet til eller endret av deployen.
 ML-notebooken synkroniseres som en workspace-fil, men er isolert og inngår ikke
 i den ordinære seks-task-jobben.
 
-Detaljert gjennomgang av hvert lag, alle åtte pipeline-steg, datasett-skjemaene
+Detaljert gjennomgang av hvert lag, alle ni pipeline-steg, datasett-skjemaene
 og begrunnelsen bak hver avveiing ligger i
 [docs/architecture.md](docs/architecture.md).
 
@@ -173,6 +177,12 @@ observasjoner fra flere tidsserier. Valget er derfor helt deterministisk — sam
 avspark, deretter stasjonsavstand og stasjons-ID. Finnes ingen stasjon innenfor
 50 km, står feltene tomme i stedet for å fylles med en måling fra feil sted.
 
+### Match Ticket Sales — `data/gold/match_ticket_sales.parquet`
+
+Én rad per kamp med antall fullførte transaksjoner, solgte billetter og brutto
+salg. Bare salg med `status = completed` teller. Produktet er aggregert og
+inneholder ingen supporter- eller transaksjonsidentifikatorer.
+
 ### Fan Activation — `data/gold/fan_activation.parquet`
 
 Én rad per canonical fan med 12 måneders kjøpsatferd, engagement-segment,
@@ -198,6 +208,13 @@ mer verdt enn et imponerende tall ingen kan etterprøve.
 
 **Ikke attendance.** `matches_purchased_12m` teller kjøp, ikke oppmøte.
 Plattformen har ingen billettscan-kilde, og produktet later ikke som den har det.
+
+### Fan Segment Summary — `data/gold/fan_segment_summary.parquet`
+
+Én PII-fri rad per engasjementssegment med antall supportere, samtykkefordeling,
+antall som kan kontaktes og median kjøpsaktivitet. Dette er supportergrunnlaget
+som kan brukes av den offentlige porteføljesiden; personproduktet
+`fan_activation.parquet` leses ikke av eksportøren.
 
 ### Isolert ML-eksperiment — fan-segmentering
 
@@ -296,7 +313,7 @@ historiske observasjoner for ferdigspilte kamper.
 - **Cloud-utvidelse:** AWS S3, Databricks, Apache Spark, Delta Lake, Unity
 	Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow og Databricks
 	Declarative Automation Bundles.
-- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 113
+- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 156
 	unit-tester, offline `dbt parse` og Terraform-validering.
 
 ## Kom i gang
@@ -342,6 +359,7 @@ python3 -m src.build_silver
 python3 -m src.build_gold
 python3 -m src.generate_fan_data
 python3 -m src.build_fan_silver
+python3 -m src.build_ticket_gold
 python3 -m src.build_fan_gold --as-of 2026-08-22
 python3 -m src.build_ml_features
 ```
@@ -382,7 +400,7 @@ print(pd.read_parquet("data/gold/fan_activation.parquet").head())
 
 ## Statisk webapp
 
-En minimal visualisering av kampdata, vær og supportersegmenter ligger i
+En navigerbar datacase over kampdata, vær og supportersegmenter ligger i
 [`docs/index.html`](docs/index.html). Siden har ingen backend eller eksterne
 JavaScript-avhengigheter og kan forhåndsvises lokalt med:
 
@@ -392,9 +410,29 @@ python3 -m http.server 4173 --directory docs
 
 Åpne deretter `http://localhost:4173`. For publisering i GitHub Pages, velg
 **Deploy from a branch**, branchen `main` og mappen `/docs` under
-**Settings > Pages**. Datagrunnlaget er et statisk, aggregert uttrekk i
-`docs/data/visualizations.json` uten persondata. Solgte billetter er tydelig
-merket som proxy fordi faktisk attendance mangler.
+**Settings > Pages**. Nettstedet er en navigerbar datacase med fire hash-routede
+visninger: oversikt, kamper, supportere og maskinlæring.
+Det er ren HTML, CSS og JavaScript uten byggesteg eller runtime-avhengigheter, og
+gjør ingen kall til API-er, S3, Databricks eller MLflow.
+
+Datagrunnlaget er et statisk, aggregert uttrekk i
+`docs/data/portfolio.json` uten persondata, generert deterministisk fra de
+PII-frie Gold-produktene og ML-snapshotet med:
+
+```bash
+python -m src.export_portfolio_data
+```
+
+Bruk `--check` for å verifisere at den innsjekkede filen er i synk med dataene.
+Fullførte billettkjøp er tydelig merket som proxy fordi faktisk attendance
+mangler.
+
+ML-visningen bygger på et versjonert øyeblikksbilde som ikke kan utledes fra
+Parquet-lagene. `data/ml/fan_segmentation_summary.json` er det PII-frie
+resultatet av segmenteringseksperimentet. Notebooken kan logge det som
+MLflow-artefakten `portfolio_summary.json`. Snapshotet som er publisert nå, er
+verifisert ved lokal reproduksjon; derfor er `selectionRunId` null i stedet for
+å vise til en MLflow-kjøring som ikke er promotert.
 
 ## Tester
 
@@ -404,15 +442,18 @@ Kjør hele testsuiten uten live API-kall:
 python3 -m unittest discover -s tests -v
 ```
 
-113 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
+159 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
 valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
 canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
 fan-segmentering, consent-aware aktivering, ML-featurebygging, validering og
 Spark-kompatibel Parquet-skriving.
 
-GitHub Actions kjører compile-kontroll og alle 113 testene på både Python 3.9 og
-3.12. Separate jobber kjører offline `dbt parse` og Terraform-formatkontroll,
+GitHub Actions kjører compile-kontroll og alle 159 testene på både Python 3.9 og
+3.12, og verifiserer med `python -m src.export_portfolio_data --check` at den
+innsjekkede `docs/data/portfolio.json` er i synk med dataene. En egen jobb
+syntakssjekker `docs/app.js` og parser den publiserte JSON-filen. Separate jobber
+kjører offline `dbt parse` og Terraform-formatkontroll,
 `init -backend=false` og `validate` uten AWS-credentials. Automatisk
 Terraform-plan og apply er ikke implementert. Bundlen er validert og den
 separate dev-jobben er testkjørt lokalt med autentisert Databricks CLI. GitHub
@@ -436,9 +477,11 @@ git diff --check
 │   ├── silver/
 │   ├── gold/
 │   └── ml/
+│       ├── fan_features.parquet
+│       └── fan_segmentation_summary.json
 ├── docs/
 │   ├── data/
-│   │   └── visualizations.json
+│   │   └── portfolio.json
 │   ├── index.html
 │   ├── app.js
 │   ├── styles.css
@@ -469,7 +512,9 @@ git diff --check
 │   ├── generate_fan_data.py
 │   ├── build_fan_silver.py
 │   ├── build_fan_gold.py
-│   └── build_ml_features.py
+│   ├── build_ml_features.py
+│   ├── build_ticket_gold.py
+│   └── export_portfolio_data.py
 ├── tests/
 ├── .env.example
 ├── requirements.txt

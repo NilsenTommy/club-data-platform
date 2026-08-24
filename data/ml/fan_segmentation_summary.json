@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "experiment": {
+    "notebook": "07_ml_fan_segmentation",
+    "selectionRunId": null,
+    "snapshotAt": "2026-08-22T00:00:00Z",
+    "windowStartAt": "2025-08-22T00:00:00Z",
+    "rowCount": 540,
+    "randomState": 42,
+    "nInit": 20,
+    "features": [
+      "recency_days",
+      "matches_purchased_12m",
+      "purchase_transactions_12m",
+      "tickets_purchased_12m",
+      "total_spend_12m",
+      "cancelled_transactions_12m",
+      "refunded_transactions_12m"
+    ],
+    "stabilitySeeds": [
+      7,
+      19,
+      43,
+      73,
+      101
+    ]
+  },
+  "promotion": {
+    "promotedAt": "2026-08-24",
+    "source": "local_reproduction",
+    "note": "Tallene bygger på data fra 22. august 2026."
+  },
+  "selection": {
+    "selectedK": 4,
+    "baselineK": 2,
+    "selectedSilhouette": 0.6391666,
+    "baselineSilhouette": 0.6388378,
+    "silhouetteDelta": 0.0003288,
+    "rule": "Høyest poengsum vinner",
+    "candidates": [
+      {
+        "k": 2,
+        "valid": true,
+        "silhouetteScore": 0.6388378,
+        "inertia": 1523.1907,
+        "minimumClusterSize": 117,
+        "minimumClusterShare": 21.67,
+        "stabilityAriMean": 1.0,
+        "stabilityAriMinimum": 1.0,
+        "selected": false
+      },
+      {
+        "k": 3,
+        "valid": true,
+        "silhouetteScore": 0.5822753,
+        "inertia": 1011.8039,
+        "minimumClusterSize": 68,
+        "minimumClusterShare": 12.59,
+        "stabilityAriMean": 1.0,
+        "stabilityAriMinimum": 1.0,
+        "selected": false
+      },
+      {
+        "k": 4,
+        "valid": true,
+        "silhouetteScore": 0.6391666,
+        "inertia": 570.8235,
+        "minimumClusterSize": 67,
+        "minimumClusterShare": 12.41,
+        "stabilityAriMean": 1.0,
+        "stabilityAriMinimum": 1.0,
+        "selected": true
+      },
+      {
+        "k": 5,
+        "valid": true,
+        "silhouetteScore": 0.5647993,
+        "inertia": 410.5804,
+        "minimumClusterSize": 67,
+        "minimumClusterShare": 12.41,
+        "stabilityAriMean": 1.0,
+        "stabilityAriMinimum": 1.0,
+        "selected": false
+      },
+      {
+        "k": 6,
+        "valid": true,
+        "silhouetteScore": 0.5638179,
+        "inertia": 351.1528,
+        "minimumClusterSize": 37,
+        "minimumClusterShare": 6.85,
+        "stabilityAriMean": 1.0,
+        "stabilityAriMinimum": 1.0,
+        "selected": false
+      }
+    ]
+  },
+  "clusterProfiles": [
+    {
+      "segment": "ML_01",
+      "label": "Ingen aktivitet",
+      "interpretation": "Ingen kjøp de siste 12 månedene.",
+      "count": 115,
+      "share": 21.3,
+      "medians": {
+        "recency_days": 366.0,
+        "matches_purchased_12m": 0.0,
+        "purchase_transactions_12m": 0.0,
+        "tickets_purchased_12m": 0.0,
+        "total_spend_12m": 0.0,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 0.0
+      },
+      "means": {
+        "recency_days": 366.0,
+        "matches_purchased_12m": 0.0,
+        "purchase_transactions_12m": 0.0,
+        "tickets_purchased_12m": 0.0,
+        "total_spend_12m": 0.0,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 0.0
+      }
+    },
+    {
+      "segment": "ML_02",
+      "label": "Mange refusjoner",
+      "interpretation": "Kjøper jevnlig, men får refundert oftere enn andre.",
+      "count": 77,
+      "share": 14.3,
+      "medians": {
+        "recency_days": 42.0,
+        "matches_purchased_12m": 5.0,
+        "purchase_transactions_12m": 5.0,
+        "tickets_purchased_12m": 9.0,
+        "total_spend_12m": 2790.0,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 1.0
+      },
+      "means": {
+        "recency_days": 87.5,
+        "matches_purchased_12m": 5.0,
+        "purchase_transactions_12m": 5.0,
+        "tickets_purchased_12m": 8.5,
+        "total_spend_12m": 2695.3,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 1.1
+      }
+    },
+    {
+      "segment": "ML_03",
+      "label": "Mange kanselleringer",
+      "interpretation": "Kjøper jevnlig, men kansellerer oftere enn andre.",
+      "count": 67,
+      "share": 12.4,
+      "medians": {
+        "recency_days": 59.0,
+        "matches_purchased_12m": 5.0,
+        "purchase_transactions_12m": 5.0,
+        "tickets_purchased_12m": 9.0,
+        "total_spend_12m": 3050.0,
+        "cancelled_transactions_12m": 1.0,
+        "refunded_transactions_12m": 0.0
+      },
+      "means": {
+        "recency_days": 82.0,
+        "matches_purchased_12m": 5.4,
+        "purchase_transactions_12m": 5.4,
+        "tickets_purchased_12m": 9.9,
+        "total_spend_12m": 3174.6,
+        "cancelled_transactions_12m": 1.1,
+        "refunded_transactions_12m": 0.1
+      }
+    },
+    {
+      "segment": "ML_04",
+      "label": "Bredt aktiv",
+      "interpretation": "Den største gruppen. Kjøper jevnlig uten mange kanselleringer eller refusjoner.",
+      "count": 281,
+      "share": 52.0,
+      "medians": {
+        "recency_days": 55.0,
+        "matches_purchased_12m": 6.0,
+        "purchase_transactions_12m": 6.0,
+        "tickets_purchased_12m": 9.0,
+        "total_spend_12m": 3040.0,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 0.0
+      },
+      "means": {
+        "recency_days": 77.2,
+        "matches_purchased_12m": 5.6,
+        "purchase_transactions_12m": 5.6,
+        "tickets_purchased_12m": 9.6,
+        "total_spend_12m": 3120.4,
+        "cancelled_transactions_12m": 0.0,
+        "refunded_transactions_12m": 0.0
+      }
+    }
+  ],
+  "ruleComparison": {
+    "adjustedRandIndex": 0.3133,
+    "ruleSegments": [
+      "INACTIVE",
+      "OCCASIONAL",
+      "ENGAGED",
+      "HIGHLY_ENGAGED"
+    ],
+    "crossTab": [
+      {
+        "segment": "ML_01",
+        "counts": {
+          "INACTIVE": 115,
+          "OCCASIONAL": 0,
+          "ENGAGED": 0,
+          "HIGHLY_ENGAGED": 0
+        }
+      },
+      {
+        "segment": "ML_02",
+        "counts": {
+          "INACTIVE": 0,
+          "OCCASIONAL": 3,
+          "ENGAGED": 42,
+          "HIGHLY_ENGAGED": 32
+        }
+      },
+      {
+        "segment": "ML_03",
+        "counts": {
+          "INACTIVE": 0,
+          "OCCASIONAL": 0,
+          "ENGAGED": 39,
+          "HIGHLY_ENGAGED": 28
+        }
+      },
+      {
+        "segment": "ML_04",
+        "counts": {
+          "INACTIVE": 0,
+          "OCCASIONAL": 10,
+          "ENGAGED": 125,
+          "HIGHLY_ENGAGED": 146
+        }
+      }
+    ],
+    "note": "ARI måler likheten mellom to inndelinger og er invariant mot segmentnavn. Det er ikke accuracy, og rule_segment er ikke fasit."
+  },
+  "guardrails": [
+    {
+      "check": "Ingen personopplysninger eller samtykkedata ble brukt til å trene modellen",
+      "passed": true
+    },
+    {
+      "check": "Om en supporter kan kontaktes, påvirket verken modellen eller resultatet",
+      "passed": true
+    },
+    {
+      "check": "Resultatet inneholder bare supporter-ID, modellgruppe og regelbasert gruppe",
+      "passed": true
+    }
+  ],
+  "decision": {
+    "verdict": "Interessant forsøk, men ikke godt nok til å tas i bruk",
+    "reasons": [
+      "Dataene er laget for demonstrasjon, så funnene sier ingenting om ekte supportere.",
+      "Modellen ble knapt bedre av å dele inn i fire grupper framfor to.",
+      "Ingen har vist at inndelingen faktisk ville hjulpet klubben."
+    ],
+    "notRegistered": [
+      "modellen er ikke registrert",
+      "den har ikke et serving-endepunkt",
+      "den tar ingen automatiserte supporterbeslutninger"
+    ]
+  }
+}
