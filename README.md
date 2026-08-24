@@ -1,336 +1,136 @@
-# Football Club Data Platform
+# Klubbdata: fra spredte kilder til bedre beslutninger
 
 [![CI](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml)
 
-![Oversikt over Football Club Data Platform](docs/images/football-club-data-platform-overview.png)
+![Oversikt over Klubbdata](docs/images/football-club-data-platform-overview.png)
 
-En liten, komplett referanseimplementasjon av et **klubbeid datafundament**:
-reelle kampdata, stadiondata og historiske værobservasjoner kombinert med en
-helsyntetisk supporterpopulasjon, foredlet gjennom **Bronze → Silver → Gold** til
-to analyseklare dataprodukter. Den opprinnelige lokale pandas/Parquet-versjonen
-er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
+**Klubbdata** er et porteføljeprosjekt som viser hvordan en fotballklubb kan
+samle kampdata, vær, billettsalg og supporterdata i ett pålitelig grunnlag for
+analyse. FK Bodø/Glimt brukes som eksempel.
+
+Prosjektet følger hele veien fra kildene til en ferdig, interaktiv visning. Det
+handler ikke bare om å flytte data, men om å gjøre dem forståelige, etterprøvbare
+og trygge å bruke.
+
+[Åpne den publiserte porteføljevisningen](https://nilsentommy.github.io/club-data-platform/)
 
 > [!IMPORTANT]
-> Dette er en teknisk demonstrasjon og et læringsprosjekt, ikke en
-> produksjonsklar plattform. All supporterdata er syntetisk og tilhører ikke
-> ekte personer.
+> Dette er en teknisk demonstrasjon, ikke en produksjonsløsning eller en
+> offisiell løsning for FK Bodø/Glimt. Kamp-, stadion- og værdata er ekte.
+> Billett- og supporterdata er laget for demonstrasjon og tilhører ikke ekte
+> personer.
 
-| | |
+## Hvorfor prosjektet er relevant
+
+En klubb har ofte nyttig informasjon fordelt på flere systemer. Kampene ligger
+ett sted, billettkjøp et annet og samtykker et tredje. Da blir selv enkle
+spørsmål tidkrevende å svare på, og ulike team kan ende med forskjellige svar.
+
+Prosjektet viser hvordan et felles datagrunnlag kan:
+
+- samle informasjon fra flere kilder uten å miste originaldataene
+- gi samme definisjon av en kamp, et stadion og en supporter på tvers av systemer
+- gjøre kvalitet og mangler synlige i stedet for å fylle inn usikre svar
+- skille mellom hvem som er aktiv, og hvem klubben faktisk har lov til å kontakte
+- gjøre analyser og maskinlæring sporbare og mulige å etterprøve
+
+## Hva løsningen kan svare på
+
+| Spørsmål | Hvordan prosjektet håndterer det |
 |---|---|
-| **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
-| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Terraform, Databricks, Databricks Asset Bundles / Databricks Declarative Automation Bundles, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow, GitHub Actions |
-| **Omfang** | 3 eksterne API-er · 9 pipeline-steg + 1 isolert ML-featuresteg · 6 Silver-datasett · 4 Gold-dataprodukter · 159 tester |
-| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 159 tester |
-| **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
-| **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) · [ML- og AI-strategi](docs/ml-ai-strategy.md) |
+| Hva skjedde rundt en kamp? | Resultat, stadion, vær og solgte billetter samles i én kampoversikt. |
+| Hvilke supportergrupper er mest aktive? | Kjøpsaktivitet oppsummeres i tydelige grupper uten å publisere persondata. |
+| Hvem kan klubben kontakte? | En supporter må både ha sagt ja til markedsføring og ha en kontaktbar e-postadresse. |
+| Kan vi stole på tallene? | Faste regler, datakvalitetskontroller og tester gjør samme kjøring reproduserbar. |
+| Gir maskinlæring nok merverdi? | Flere inndelinger sammenlignes, og forsøket tas ikke i bruk når gevinsten ikke er godt nok dokumentert. |
 
----
+Demoen inneholder blant annet **21 kamper**, **540 syntetiske supportere** og
+**278 supportere som kan kontaktes**. Vær finnes bare for 8 av 21 kamper. De
+resterende står uten måling i stedet for å få et gjettet tall.
 
-## 1. Problem
-
-> Fotballklubber produserer data på tvers av spesialiserte systemer for sport,
-> billettering, kommersiell drift og digitale flater. Utfordringen er å etablere
-> et pålitelig datafundament uten å binde organisasjonen til enkeltstående
-> kildesystemer eller aktiveringsplattformer.
-
-Konsekvensen når fundamentet mangler er gjenkjennelig: hvert nytt spørsmål
-besvares ved å koble sammen kildesystemer på nytt, «supporter» betyr én ting i
-billettsystemet og noe annet i appen, og aktiveringsverktøyet ender opp med å eie
-definisjonen av hvem klubben faktisk har lov til å kontakte.
-
-## 2. Mål
-
-> Bygge en liten referanseimplementasjon av et klubbeid datafundament.
-
-Konkret skal prosjektet vise:
-
-- **Rådata bevares uendret**, så intern modell kan endres uten ny innhenting.
-- **Én kildeuavhengig modell** med plattformens egne nøkler for kamp, stadion og fan.
-- **Dataprodukter med tydelig grain**, klare til bruk uten kjennskap til kildene.
-- **Determinisme**, så en endring i tall alltid kan spores til en endring i data
-  eller logikk — aldri til tilfeldigheter i kjøringen.
-- **Samtykke som en førsteklasses egenskap**, ikke et filter noen må huske å legge på.
-
-Målet er *ikke* å demonstrere flest mulig verktøy. Hvert valg skal kunne
-forsvares med problemet det løser.
-
-## 3. Arkitektur
-
-Prosjektet har to implementasjonsspor. Den lokale referanseimplementasjonen kan
-kjøres ende-til-ende fra repoet og bruker filer, pandas og Parquet. Cloud-
-utvidelsen behandler de samme rå kamp-, stadion- og værdataene med S3 som
-landing zone og Databricks som lakehouse. Rå supporterdata, kontaktdata og
-samtykkedata forblir lokale og er ikke flyttet til S3 eller Databricks. Bare det
-minimerte, syntetiske og PII-frie featuregrunnlaget er lastet til et managed
-Unity Catalog-volume for det isolerte ML-eksperimentet.
-
-### Lokal referanseimplementasjon
-
-```mermaid
-flowchart TD
-		FD[FootballData API] --> BF[Bronze: football JSON]
-		BF --> N[Nominatim geocoding]
-		N --> BG[Bronze: geocoding JSON]
-		BF --> F[Frost station lookup]
-		BG --> F
-		F --> BW[Bronze: source and observation JSON]
-		BF --> S[Silver builder]
-		BG --> S
-		BW --> S
-		S --> SM[matches.parquet]
-		S --> SV[venues.parquet]
-		S --> SW[weather_observations.parquet]
-		SM --> G[Gold builder]
-		SV --> G
-		SW --> G
-		G --> GM[match_insights.parquet]
-		TS[Simulert billettsystem] --> BTS[Bronze: kunder og billettsalg]
-		SA[Simulert supporterapp] --> BAS[Bronze: appbrukere]
-		BTS --> FS[Fan Silver builder]
-		BAS --> FS
-		FS --> CF[Canonical fans og identities]
-		FS --> CS[Canonical ticket sales]
-		CF --> FG[Fan Gold builder]
-		CS --> FG
-		FG --> FA[fan_activation.parquet]
-		FG --> FSS[fan_segment_summary.parquet]
-		SM --> TG[Ticket Gold builder]
-		CS --> TG
-		TG --> MTS[match_ticket_sales.parquet]
-		GM -. Senere fan-match-produkt .-> FI[Matchrettet aktivering]
-```
-
-| Lag | Ansvar | Eier | Format |
-|---|---|---|---|
-| **Bronze** | Kilderesponser lagret byte-for-byte, immutable og cachet | Kildesystemet | JSON / CSV |
-| **Silver** | Canonical, kildeuavhengig modell med typing, deduplisering og validering | Plattformen | Parquet |
-| **Gold** | Dataprodukter med ett definert grain og én definert bruker | Forretningsdomenet | Parquet |
-
-Gold leser bare Silver. Silver leser bare Bronze. Ingen steg hopper over et lag,
-og ingen steg skriver tilbake til en kilde.
-
-### Cloud-utvidelse
+## Fra rådata til ferdige svar
 
 ```mermaid
 flowchart LR
-	S3[AWS S3 raw landing] --> EL[Unity Catalog external location<br/>read-only]
-	EL --> V[External volume<br/>/Volumes/clubdata/bronze/landing_s3]
-	V --> B[Bronze Delta]
-	B --> S[Silver Delta]
-	S --> G[dbt Gold Delta]
-	G --> DQ[Datakvalitetskontroller]
-	LJ[Lakeflow Jobs] -. orkestrerer notebook- og dbt-steg .-> B
-	LJ -.-> S
-	LJ -.-> G
-	LJ -.-> DQ
-	CI[GitHub Actions CI] -. validerer .-> R[Repo-kode]
-	R --> DB[Databricks Declarative Automation Bundle<br/>dev-target]
-	DB -. manuell deploy og kjøring .-> LJ
+	K[Kamp, vær, billetter og app] --> R[Originaldata lagres]
+	R --> V[Data ryddes og kobles]
+	V --> P[Datagrunnlag klare til bruk]
+	P --> A[Webvisning, analyse og maskinlæringsforsøk]
 ```
 
-Den private S3-bøtten `clubdata-platform-landing-portfolio` inneholder 34
-råfiler: 1 fra FootballData, 11 fra Nominatim, 14 Frost source-responser og 8
-Frost observation-responser. Block Public Access, Bucket Owner Enforced,
-SSE-S3 og versjonering er aktivert. Lifecycle-reglene sletter gamle
-ikke-gjeldende versjoner etter 30 dager, beholder to nyere ikke-gjeldende
-versjoner og avbryter ufullstendige multipart-opplastinger etter 7 dager.
-Selve bøtten og sikkerhetskonfigurasjonen administreres nå med Terraform. Den
-eksisterende bøtten ble importert, ikke gjenskapt; etter apply viste en ny plan
-`0 add, 0 change, 0 destroy`. Lokal state er ignorert og ikke committet.
+I koden kalles stegene **Bronze**, **Silver** og **Gold**:
 
-Databricks eksponerer bøtten gjennom den read-only external location-en
-`clubdata_landing_s3` og Unity Catalog-volumet
-`/Volumes/clubdata/bronze/landing_s3`. Notebookene bygger Bronze og Silver som
-Delta-tabeller, mens Gold-tabellen `match_insights` bygges med dbt. Lakeflow
-Jobs orkestrerer notebook- og dbt-stegene. Jobbdefinisjonen for development
-ligger som en Databricks Declarative Automation Bundle i `databricks/bundle/`
-med lokale `WORKSPACE`-kilder for notebooks og dbt. En separat dev-jobb er
-deployet manuelt, og hele seks-task-kjeden er testkjørt med `SUCCESS`. Den
-eksisterende hovedjobben ble verken bundet til eller endret av deployen.
-ML-notebooken synkroniseres som en workspace-fil, men er isolert og inngår ikke
-i den ordinære seks-task-jobben.
+- **Bronze** er originalen fra kilden, lagret uendret.
+- **Silver** er den ryddede og sammenkoblede arbeidsversjonen.
+- **Gold** er ferdige datagrunnlag laget for et konkret behov.
 
-Detaljert gjennomgang av hvert lag, alle ni pipeline-steg, datasett-skjemaene
-og begrunnelsen bak hver avveiing ligger i
-[docs/architecture.md](docs/architecture.md).
+## Datagrunnlag klare til bruk
 
-## 4. Dataprodukter
-
-### Match Insights — `data/gold/match_insights.parquet`
-
-Én rad per kamp med kampfakta, resultat sett fra klubben, stadionmetadata og
-været ved avspark.
-
-| | |
-|---|---|
-| **Grain** | Én kamp |
-| **Bruk** | Kampanalyse, dashboards, kontekst for etterspørselsmodeller |
-| **Persondata** | Ingen |
-| **Dagens uttrekk** | 21 kamper, 14 med koordinater, 8 med vær ved avspark |
-
-Produktet svarer på spørsmål som *«spiller vi dårligere i regn på bortebane?»*
-uten at konsumenten trenger å kjenne FootballData, Nominatim eller Frost.
-
-**Sentral avveiing:** Vær er ikke en enkel join. Én kamp kan ha mange
-observasjoner fra flere tidsserier. Valget er derfor helt deterministisk — samme
-`venue_id`, maks tre timer fra avspark, korteste tidsavstand, deretter før
-avspark, deretter stasjonsavstand og stasjons-ID. Finnes ingen stasjon innenfor
-50 km, står feltene tomme i stedet for å fylles med en måling fra feil sted.
-
-### Match Ticket Sales — `data/gold/match_ticket_sales.parquet`
-
-Én rad per kamp med antall fullførte transaksjoner, solgte billetter og brutto
-salg. Bare salg med `status = completed` teller. Produktet er aggregert og
-inneholder ingen supporter- eller transaksjonsidentifikatorer.
-
-### Fan Activation — `data/gold/fan_activation.parquet`
-
-Én rad per canonical fan med 12 måneders kjøpsatferd, engagement-segment,
-samtykkestatus og aktiveringsstatus.
-
-| | |
-|---|---|
-| **Grain** | Én canonical fan |
-| **Bruk** | Målgruppegrunnlag for billettaktivering og reaktivering |
-| **Persondata** | Ja — e-post og visningsnavn (syntetisk) |
-| **Dagens uttrekk** | 540 fans, 278 aktiveringsbare · 115 `INACTIVE`, 13 `OCCASIONAL`, 206 `ENGAGED`, 206 `HIGHLY_ENGAGED` |
-
-Snapshotdatoen er en påkrevd `--as-of`-parameter, ikke `now()`. Det gjør
-12-månedersvinduet reproduserbart og testbart.
-
-**Sentral avveiing:** de to kildesystemene deler ingen nøkkel, og generatoren
-skriver bevisst aldri sin interne person-ID til rådata. Identiteten må derfor
-løses fra fragmenterte felter. Koblingen er konservativ — to identiteter slås
-sammen bare når den normaliserte e-postadressen forekommer nøyaktig én gang i
-hver kilde. Resultatet er 260 av 540 fans koblet på tvers av kilder, altså langt
-fra alt. Det er poenget: en forklarbar regel som lar tvilstilfeller stå uløst er
-mer verdt enn et imponerende tall ingen kan etterprøve.
-
-**Ikke attendance.** `matches_purchased_12m` teller kjøp, ikke oppmøte.
-Plattformen har ingen billettscan-kilde, og produktet later ikke som den har det.
-
-### Fan Segment Summary — `data/gold/fan_segment_summary.parquet`
-
-Én PII-fri rad per engasjementssegment med antall supportere, samtykkefordeling,
-antall som kan kontaktes og median kjøpsaktivitet. Dette er supportergrunnlaget
-som kan brukes av den offentlige porteføljesiden; personproduktet
-`fan_activation.parquet` leses ikke av eksportøren.
-
-### Isolert ML-eksperiment — fan-segmentering
-
-Det eksplorative eksperimentet bruker 540 syntetiske fans og syv numeriske
-treningsfeatures for recency, kamper, transaksjoner, billetter, forbruk,
-kanselleringer og refusjoner. Ingen PII, kontaktdata, samtykke, `fan_id`,
-tidspunkt eller `rule_segment` brukes i treningen.
-
-K-means-kandidater fra `k=2` til `k=6` spores med hosted MLflow. `k=4` ble valgt
-med silhouette `0.6392`, men `k=2` var nesten lik med `0.6388`; fire segmenter er
-derfor ikke entydig bedre enn to. Den valgte løsningen har segmentstørrelsene
-115, 77, 67 og 281. Stabilitet ARI var `1.0` på tvers av faste seeds på dette
-syntetiske datasettet. ARI mot `rule_segment` var omtrent `0.3133`; dette er et
-mål på likhet mellom partisjoneringer, ikke accuracy, og `rule_segment` er ikke
-ground truth.
-
-Eksperimentet er teknisk vellykket, men eksplisitt ikke produksjonsklart. Det
-demonstrerer metode og sporbarhet uten å etablere forretningsverdi på reelle
-supportere. Resultater, tolkning og krav før eventuell produksjon er dokumentert
-i [ML- og AI-strategien](docs/ml-ai-strategy.md).
-
-## 5. Governance
-
-```text
-Kildesystemene eier de operasjonelle prosessene.
-Domenene beholder forretningseierskapet.
-Plattformen lager gjenbrukbare canonical data.
-Persondata skilles fra analytisk bruk der det er mulig.
-Aktivering krever gyldig samtykke.
-```
-
-I praksis:
-
-- **Ticketing er autoritativ** for samtykke. Plattformen kopierer verdien, den
-  definerer den ikke.
-- **Samtykke har tre tilstander** — `True` (283), `False` (142) og *ukjent* (115).
-  App-only fans får ukjent, ikke et implisitt avslag. `False` er en beslutning
-  tatt av en person; ukjent er en mangel hos plattformen.
-- **`marketing_allowed` krever både** eksplisitt samtykke og en kontaktbar
-	e-post. Et segment beskriver atferd — samtykket avgjør handling.
-- **ML-segmentet endrer aldri `marketing_allowed`.** Eksperimentet produserer
-	analyse, ikke en rett til å kontakte noen.
-- **Ingen automatisert supporterbeslutning** tas av modellen. Det er heller ikke
-	opprettet modellregistrering eller serving endpoint.
-- **`push_opt_in` er en kanalpreferanse**, ikke marketing consent.
-- **Bygget avvises** hvis samtykket ble oppdatert etter valgt `--as-of`, slik at
-  en målgruppeliste aldri bygger på en status som ikke fantes på
-  snapshot-tidspunktet.
-- **Kampdomenet er persondatafritt** og kan derfor deles bredere enn
-  fan-produktene.
-
-Eierskapsmodell, dataminimering, kjente gap og prioritert plan står i
-[docs/governance.md](docs/governance.md).
-
-## 6. Hva jeg bevisst ikke bygde
-
-Den lokale implementasjonen er bevisst liten selv om cloud-utvidelsen viser
-hvordan de samme prinsippene kan realiseres med en katalog, objektlagring,
-Spark, Delta, dbt og orkestrering.
-
-| Ikke bygget | Hvorfor ikke | Når det ville lønt seg |
+| Datagrunnlag | Innhold | Viktig avgrensning |
 |---|---|---|
-| Automatisk CD | Bundle-deploy og kjøring av dev-jobben er manuell. GitHub Actions har ingen Databricks-credentials og deployer eller starter ikke Databricks-jobber | Når deploy og jobbstart kan automatiseres med tydelig miljø- og godkjenningsmodell |
-| Komplett Infrastructure as Code | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, og Lakeflow-jobbdefinisjonen er Bundle-styrt for dev. IAM, storage credential, external location, external volume, produksjonstarget/binding og automatisk bundle-deploy er ikke IaC/CD | Når de gjenværende ressursene kan forvaltes med miljøskille, sikker state og godkjent produksjonsprosess |
-| Valideringsrammeverk | Eksplisitt Python viser *hva* som valideres og hvorfor, uten et rammeverk å lære først | Når reglene skal deles og håndheves på tvers av team |
-| Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
-| Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
-| Prediktiv aktiveringsscore | Uten attendance- og app-events ville modellen lært av de samme kjøpene den allerede rapporterer | Når event-data faktisk finnes |
-| Produksjons-MLOps | Eksperimentet har MLflow-sporing, men ikke registry og approval, serving, modell- og datamonitorering, drift detection eller automatisk retrening | Når en faglig validert modell har eierskap, produksjonsdata, godkjenningsflyt, overvåking og eksplisitte retreningskriterier |
-| Fan-match-produkt | Krysser to domener og reiser reelle spørsmål om tilgang og dataminimering som fortjener en beslutning, ikke en snarvei | Når både konsument og tilgangsmodell er definert |
-| Produksjonsklar tilgangskontroll og retention per datasett | S3-landing har grunnsikring og lifecycle, men supporterproduktene er fortsatt lokale prototypefiler | Før behandling av data om ekte personer |
+| Kampinnsikt (`match_insights.parquet`) | Resultat, stadion og vær per kamp | Manglende vær forblir manglende. |
+| Billettsalg (`match_ticket_sales.parquet`) | Antall billetter og brutto salg per kamp | Viser kjøp, ikke faktisk oppmøte. |
+| Supporteraktivering (`fan_activation.parquet`) | Aktivitet og samtykkestatus per supporter | Inneholder kun syntetiske persondata. |
+| Supportergrupper (`fan_segment_summary.parquet`) | Aggregerte tall per aktivitetsgruppe | Inneholder ikke persondata og kan publiseres. |
 
-Full liste over prototypebegrensninger står i
-[docs/architecture.md](docs/architecture.md#kjente-begrensninger), og
-governance-gapene med prioritert rekkefølge i
-[docs/governance.md](docs/governance.md#kjente-gap-og-plan).
+## Teknisk gjennomføring
 
----
+Den komplette løsningen kan kjøres lokalt med Python, pandas og Parquet. I
+tillegg er kampdelen bygget som en skyløsning for å vise hvordan de samme
+prinsippene kan brukes i en større dataplattform.
 
-## Datakilder
+| Del | Teknologi |
+|---|---|
+| Lokal datapipeline | Python 3.9+, pandas, pyarrow og Parquet |
+| Skyløsning | AWS S3, Databricks, Spark, Delta Lake, Unity Catalog og Lakeflow Jobs |
+| Modellering og kvalitet | dbt, eksplisitte valideringsregler og automatiserte tester |
+| Maskinlæring | scikit-learn og MLflow i et isolert segmenteringseksperiment |
+| Infrastruktur og levering | Terraform, Databricks Asset Bundles og GitHub Actions |
+| Presentasjon | Statisk HTML, CSS og JavaScript uten backend eller persondata |
 
-| | Kilde | Bruk | Tilgang |
-|---|---|---|---|
-| <img src="docs/images/sources/footballdata.png" alt="FootballData" width="24" height="24"> | [FootballData](https://footballdata.io/) | Kamper for team ID `293` | Bearer-token |
-| <img src="docs/images/sources/openstreetmap.png" alt="OpenStreetMap" width="24" height="24"> | [OpenStreetMap Nominatim](https://nominatim.org/) | Geocoding av stadioner | Identifiserende User-Agent |
-| <img src="docs/images/sources/met-norway.png" alt="MET Norway" width="24" height="24"> | [MET Norway Frost](https://frost.met.no/) | Værstasjoner og historiske observasjoner | Frost client ID |
-| | Syntetisk billettsystem og supporterapp | Fragmenterte supporter- og billettdata | Lokal generator, ingen API-tilgang |
+Den lokale løsningen dekker både kamp- og supporterdata. Skyløsningen
+dekker foreløpig kampdata. Se [arkitekturdokumentasjonen](docs/architecture.md)
+for dataflyt, tabeller og tekniske avveiinger.
 
-Locationforecast brukes ikke. Det leverer prognoser, mens prosjektet trenger
-historiske observasjoner for ferdigspilte kamper.
+## Viktige avgrensninger
 
-## Teknologi
+- Dette er en prototype og mangler blant annet full produksjonstilgang,
+	automatisk utrulling og overvåking.
+- Supporter- og billettdata er syntetiske. Innsikten demonstrerer metode, ikke
+	faktiske forhold i klubben.
+- Solgte billetter brukes som mål på etterspørsel, ikke som publikumstall.
+- Maskinlæringsforsøket er dokumentert, men ikke satt i produksjon eller brukt til
+	automatiske beslutninger.
 
-- **Lokal referanseimplementasjon:** Python 3.9+, `requests`, `python-dotenv`,
-	pandas, pyarrow, Parquet, `unittest` og `unittest.mock`.
-- **Cloud-utvidelse:** AWS S3, Databricks, Apache Spark, Delta Lake, Unity
-	Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow og Databricks
-	Declarative Automation Bundles.
-- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 156
-	unit-tester, offline `dbt parse` og Terraform-validering.
+Se [governance](docs/governance.md) og
+[begrensninger og vei videre](docs/limitations.md) for detaljer.
 
 ## Kom i gang
 
-### 1. Opprett miljø
+### Se webvisningen
+
+Webvisningen trenger ingen bygging eller installasjon:
+
+```bash
+python3 -m http.server 4173 --directory docs
+```
+
+Åpne deretter [http://localhost:4173](http://localhost:4173). Visningen leser et
+statisk, aggregert datauttrekk og gjør ingen kall til API-er, AWS eller
+Databricks.
+
+### Sett opp lokal kjøring
+
+Kjør kommandoene fra roten av repoet:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
-```
-
-### 2. Konfigurer API-tilgang
-
-```bash
 cp .env.example .env
 ```
+
+For å hente nye kamp- og værdata fyller du inn følgende i `.env`:
 
 ```dotenv
 FOOTBALLDATA_API_KEY=your_api_key_here
@@ -338,101 +138,37 @@ FROST_CLIENT_ID=your_client_id_here
 PLATFORM_USER_AGENT=football-club-data-platform/0.1 your-real-email@example.org
 ```
 
-- `FOOTBALLDATA_API_KEY` brukes som Bearer-token.
-- `FROST_CLIENT_ID` opprettes via
-	[Frost credentials](https://frost.met.no/auth/requestCredentials.html).
-- `PLATFORM_USER_AGENT` må identifisere applikasjonen med en reell kontaktadresse
-	eller nettside for å følge Nominatim-policyen.
+[MET Norway Frost](https://frost.met.no/auth/requestCredentials.html) utsteder
+`FROST_CLIENT_ID`. `PLATFORM_USER_AGENT` må inneholde en reell kontaktadresse
+for å følge reglene til OpenStreetMap Nominatim. `.env` er ignorert av Git og
+skal ikke legges inn i repoet.
 
-`.env` er ignorert av Git. Ikke legg API-nøkler eller personlige credentials i
-repoet.
+### Kjør dataflyten
 
-## Kjør pipeline
+Repoet inneholder allerede et rådatauttrekk. Bygg ferdige data på nytt med:
 
-Kommandoene kjøres fra repo-roten og i denne rekkefølgen:
+```bash
+python3 -m src.build_silver
+python3 -m src.build_gold
+python3 -m src.build_fan_silver
+python3 -m src.build_ticket_gold
+python3 -m src.build_fan_gold --as-of 2026-08-22
+python3 -m src.build_ml_features
+python3 -m src.export_portfolio_data
+```
+
+For å hente ferske kildedata eller lage supportergrunnlaget på nytt, kjør disse
+før byggestegene:
 
 ```bash
 python3 -m src.fetch_matches
 python3 -m src.geocode_venues
 python3 -m src.fetch_weather
-python3 -m src.build_silver
-python3 -m src.build_gold
 python3 -m src.generate_fan_data
-python3 -m src.build_fan_silver
-python3 -m src.build_ticket_gold
-python3 -m src.build_fan_gold --as-of 2026-08-22
-python3 -m src.build_ml_features
 ```
 
-Hva hvert steg gjør, hvilke avveiinger som ligger bak og hvilke tall det
-produserer på datasettet i repoet, er dokumentert i
-[docs/architecture.md](docs/architecture.md#pipelinesteg).
-
-## Datasett og datakvalitet
-
-Skjema, nøkkelstrategi og de deterministiske reglene for hvert Silver- og
-Gold-datasett er dokumentert i
-[docs/architecture.md](docs/architecture.md#silver-datasett).
-
-Kort oppsummert:
-
-- Kritiske brudd stopper bygget med en typet exception og tydelig melding.
-- Gold valideres mot Silver: samme kamper, samme fans, ingen dupliserte joins.
-- Beregnede felter valideres mot sine egne regler, så `engagement_segment` og
-  `marketing_allowed` ikke kan komme ut av synk med definisjonen.
-- Uendrede Bronze-filer gir byte-identiske Silver-filer, og uendret Silver gir
-  byte-identisk Gold.
-
-## Inspiser resultatene
-
-```python
-import pandas as pd
-
-print(pd.read_parquet("data/silver/matches.parquet").head())
-print(pd.read_parquet("data/silver/venues.parquet").head())
-print(pd.read_parquet("data/silver/weather_observations.parquet").head())
-print(pd.read_parquet("data/silver/silver_fans.parquet").head())
-print(pd.read_parquet("data/silver/silver_fan_identities.parquet").head())
-print(pd.read_parquet("data/silver/silver_ticket_sales.parquet").head())
-print(pd.read_parquet("data/gold/match_insights.parquet").head())
-print(pd.read_parquet("data/gold/fan_activation.parquet").head())
-```
-
-## Statisk webapp
-
-En navigerbar datacase over kampdata, vær og supportersegmenter ligger i
-[`docs/index.html`](docs/index.html). Siden har ingen backend eller eksterne
-JavaScript-avhengigheter og kan forhåndsvises lokalt med:
-
-```bash
-python3 -m http.server 4173 --directory docs
-```
-
-Åpne deretter `http://localhost:4173`. For publisering i GitHub Pages, velg
-**Deploy from a branch**, branchen `main` og mappen `/docs` under
-**Settings > Pages**. Nettstedet er en navigerbar datacase med fire hash-routede
-visninger: oversikt, kamper, supportere og maskinlæring.
-Det er ren HTML, CSS og JavaScript uten byggesteg eller runtime-avhengigheter, og
-gjør ingen kall til API-er, S3, Databricks eller MLflow.
-
-Datagrunnlaget er et statisk, aggregert uttrekk i
-`docs/data/portfolio.json` uten persondata, generert deterministisk fra de
-PII-frie Gold-produktene og ML-snapshotet med:
-
-```bash
-python -m src.export_portfolio_data
-```
-
-Bruk `--check` for å verifisere at den innsjekkede filen er i synk med dataene.
-Fullførte billettkjøp er tydelig merket som proxy fordi faktisk attendance
-mangler.
-
-ML-visningen bygger på et versjonert øyeblikksbilde som ikke kan utledes fra
-Parquet-lagene. `data/ml/fan_segmentation_summary.json` er det PII-frie
-resultatet av segmenteringseksperimentet. Notebooken kan logge det som
-MLflow-artefakten `portfolio_summary.json`. Snapshotet som er publisert nå, er
-verifisert ved lokal reproduksjon; derfor er `selectionRunId` null i stedet for
-å vise til en MLflow-kjøring som ikke er promotert.
+De tre første kommandoene krever API-tilgangen fra `.env`. Supportergeneratoren
+er lokal og lager de samme syntetiske dataene ved hver kjøring.
 
 ## Tester
 
@@ -440,99 +176,45 @@ Kjør hele testsuiten uten live API-kall:
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 -m src.export_portfolio_data --check
 ```
 
-159 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
-caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
-valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
-canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
-fan-segmentering, consent-aware aktivering, ML-featurebygging, validering og
-Spark-kompatibel Parquet-skriving.
+Testene dekker innhenting, kobling, forretningsregler, samtykke, datakvalitet og
+reproduserbare resultater. GitHub Actions kjører kontrollene på Python 3.9 og
+3.12, i tillegg til validering av frontend, dbt og Terraform.
 
-GitHub Actions kjører compile-kontroll og alle 159 testene på både Python 3.9 og
-3.12, og verifiserer med `python -m src.export_portfolio_data --check` at den
-innsjekkede `docs/data/portfolio.json` er i synk med dataene. En egen jobb
-syntakssjekker `docs/app.js` og parser den publiserte JSON-filen. Separate jobber
-kjører offline `dbt parse` og Terraform-formatkontroll,
-`init -backend=false` og `validate` uten AWS-credentials. Automatisk
-Terraform-plan og apply er ikke implementert. Bundlen er validert og den
-separate dev-jobben er testkjørt lokalt med autentisert Databricks CLI. GitHub
-Actions har ingen Databricks-credentials, deployer ikke bundlen og starter ikke
-Databricks-jobber. Deploy og kjøring er derfor fortsatt manuell, og dette er CI,
-ikke full CD.
+## Finn frem i prosjektet
 
-Nyttige tilleggskontroller:
+| Mappe | Innhold |
+|---|---|
+| `src/` | Innhenting, bearbeiding, datakvalitet og eksport |
+| `data/` | Rådata, ryddede data og ferdige datagrunnlag |
+| `docs/` | Webvisning og teknisk dokumentasjon |
+| `databricks/` | Notebooks og definisjon av Databricks-jobben |
+| `dbt/` | Gold-modell og datatester for skyløsningen |
+| `infra/terraform/` | Infrastrukturkode for S3 |
+| `tests/` | Automatiserte tester for den lokale dataflyten |
 
-```bash
-python3 -m py_compile src/*.py tests/*.py
-git diff --check
-```
+## Fordypning
 
-## Prosjektstruktur
+- [Arkitektur](docs/architecture.md): dataflyt, datasett og tekniske avveiinger
+- [Governance](docs/governance.md): eierskap, personvern og samtykke
+- [Begrensninger](docs/limitations.md): hva demoen ikke dekker og prioritert vei
+  mot produksjon
+- [ML- og AI-strategi](docs/ml-ai-strategy.md): metode, resultater og hvorfor
+	modellen ikke er produksjonssatt
+- [Databricks bundle](databricks/bundle/README.md): validering og manuell utrulling
 
-```text
-.
-├── data/
-│   ├── bronze/
-│   ├── silver/
-│   ├── gold/
-│   └── ml/
-│       ├── fan_features.parquet
-│       └── fan_segmentation_summary.json
-├── docs/
-│   ├── data/
-│   │   └── portfolio.json
-│   ├── index.html
-│   ├── app.js
-│   ├── styles.css
-│   ├── architecture.md
-│   ├── governance.md
-│   └── ml-ai-strategy.md
-├── databricks/
-│   ├── notebooks/
-│   └── bundle/
-│       ├── databricks.yml
-│       ├── README.md
-│       └── resources/
-│           └── clubdata_job.yml
-├── dbt/
-│   ├── models/
-│   └── tests/
-├── infra/
-│   └── terraform/
-│       └── aws-s3/
-├── .github/
-│   └── workflows/
-├── src/
-│   ├── fetch_matches.py
-│   ├── geocode_venues.py
-│   ├── fetch_weather.py
-│   ├── build_silver.py
-│   ├── build_gold.py
-│   ├── generate_fan_data.py
-│   ├── build_fan_silver.py
-│   ├── build_fan_gold.py
-│   ├── build_ml_features.py
-│   ├── build_ticket_gold.py
-│   └── export_portfolio_data.py
-├── tests/
-├── .env.example
-├── requirements.txt
-└── README.md
-```
+## Datakilder og bruk
 
-## Attribution og bruksvilkår
+- Kampdata kommer fra [FootballData](https://footballdata.io/).
+- Stadionplasseringer kommer fra
+	[OpenStreetMap contributors](https://www.openstreetmap.org/copyright) via
+	Nominatim og følger ODbL og tjenestens bruksvilkår.
+- Historiske værdata og stasjonsinformasjon kommer fra
+	[MET Norway Frost](https://frost.met.no/) og følger lisensen oppgitt i
+	API-responsene.
+- Billett- og supporterdata er syntetiske og laget lokalt i prosjektet.
 
-- Geocodingdata kommer fra
-  [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) via
-  Nominatim og er underlagt ODbL og tjenestens usage policy.
-- Historiske værdata og station metadata kommer fra
-  [MET Norway Frost](https://frost.met.no/) og er underlagt MET Norways vilkår
-  og angitt datalisens i API-responsene.
-- Kampdata er underlagt vilkårene til FootballData-leverandøren.
-- All supporterdata er syntetisk, se
-  [docs/governance.md](docs/governance.md#syntetiske-data).
-
-Koden er lisensiert under [MIT-lisensen](LICENSE). Lisensen omfatter ikke
-eksterne rådata; disse følger vilkårene, lisensene og attribution-kravene til
-de respektive kildene som angitt over.
+Koden er lisensiert under [MIT-lisensen](LICENSE). Eksterne rådata følger
+vilkårene og lisensene til de respektive kildene.
