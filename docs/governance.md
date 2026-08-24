@@ -194,8 +194,8 @@ Dette er gapene jeg ville tatt tak i først, i denne rekkefølgen.
 | 6 | Ingen lineage-metadata | Opphavet til en verdi må leses ut av koden | Eksplisitt lineage mellom kamp, venue, station og observation |
 | 7 | Ingen audit av uttrekk | Ingen sporing av hvem som hentet en målgruppeliste | Logging av uttrekk fra aktiveringsproduktet |
 | 8 | Secrets i lokal `.env` | Fungerer lokalt, skalerer ikke til et team | Secrets manager med rotasjon |
-| 9 | IaC er bare delvis implementert | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, men IAM, Databricks storage credential, external location, external volume og Lakeflow-jobben administreres manuelt | Terraform og Databricks Asset Bundles for de gjenværende ressursene |
-| 10 | Ingen automatisk CD | GitHub Actions validerer, men deployer eller starter ikke Databricks-jobben | Automatisert deploy og jobbstart med miljøspesifikke godkjenninger |
+| 9 | IaC er bare delvis implementert | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, og Lakeflow-jobbdefinisjonen er en Databricks Declarative Automation Bundle for dev. IAM, storage credential, external location, external volume, produksjonstarget/binding og automatisk bundle-deploy er ikke IaC/CD | Kodifiser de gjenværende ressursene med sikkert miljøskille og uten å påstå at produksjonsjobben eller hele Databricks-miljøet allerede er IaC-styrt |
+| 10 | Ingen automatisk CD | Bundle-deploy og kjøring er manuell. GitHub Actions har ingen Databricks-credentials og deployer eller starter ikke Databricks-jobber | Automatisert deploy og jobbstart med miljøspesifikke godkjenninger |
 
 Prioriteringen følger risiko, ikke teknisk interesse: tilgang til persondata før
 skjemagarantier, og sletteflyt før lineage.
@@ -203,8 +203,10 @@ skjemagarantier, og sletteflyt før lineage.
 GitHub Actions kjører CI med compile-kontroll, 98 unit-tester på Python 3.9 og
 3.12, offline `dbt parse` og Terraform-formatkontroll, `init -backend=false` og
 `validate` uten AWS-credentials. Automatisk Terraform-plan og apply er ikke
-implementert. Dette er ikke full CD. Databricks-jobben leser `main`, men
-kjøring og konfigurasjon er foreløpig manuelt styrt.
+implementert. Bundlen er validert og den separate dev-jobbens seks-task-kjede
+er kjørt med `SUCCESS` lokalt via autentisert Databricks CLI, uten å binde til
+eller endre hovedjobben. GitHub Actions har ingen Databricks-credentials og
+deploy eller kjøring av bundlen er ikke automatisert. Dette er CI, ikke full CD.
 
 ## Lisenser og attribution
 
