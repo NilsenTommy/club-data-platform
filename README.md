@@ -18,11 +18,11 @@ er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
 | | |
 |---|---|
 | **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
-| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Terraform, Databricks, Databricks Asset Bundles / Databricks Declarative Automation Bundles, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, GitHub Actions |
-| **Omfang** | 3 eksterne API-er · 8 pipeline-steg · 6 Silver-datasett · 2 Gold-dataprodukter · 98 tester |
-| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 98 tester |
+| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Terraform, Databricks, Databricks Asset Bundles / Databricks Declarative Automation Bundles, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow, GitHub Actions |
+| **Omfang** | 3 eksterne API-er · 8 eksisterende pipeline-steg + 1 isolert ML-featuresteg · 6 Silver-datasett · 2 Gold-dataprodukter · 113 tester |
+| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 113 tester |
 | **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
-| **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) |
+| **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) · [ML- og AI-strategi](docs/ml-ai-strategy.md) |
 
 ---
 
@@ -59,8 +59,10 @@ forsvares med problemet det løser.
 Prosjektet har to implementasjonsspor. Den lokale referanseimplementasjonen kan
 kjøres ende-til-ende fra repoet og bruker filer, pandas og Parquet. Cloud-
 utvidelsen behandler de samme rå kamp-, stadion- og værdataene med S3 som
-landing zone og Databricks som lakehouse. Supporterdata er med vilje bare i den
-lokale implementasjonen og er ikke flyttet til S3.
+landing zone og Databricks som lakehouse. Rå supporterdata, kontaktdata og
+samtykkedata forblir lokale og er ikke flyttet til S3 eller Databricks. Bare det
+minimerte, syntetiske og PII-frie featuregrunnlaget er lastet til et managed
+Unity Catalog-volume for det isolerte ML-eksperimentet.
 
 ### Lokal referanseimplementasjon
 
@@ -141,6 +143,8 @@ ligger som en Databricks Declarative Automation Bundle i `databricks/bundle/`
 med lokale `WORKSPACE`-kilder for notebooks og dbt. En separat dev-jobb er
 deployet manuelt, og hele seks-task-kjeden er testkjørt med `SUCCESS`. Den
 eksisterende hovedjobben ble verken bundet til eller endret av deployen.
+ML-notebooken synkroniseres som en workspace-fil, men er isolert og inngår ikke
+i den ordinære seks-task-jobben.
 
 Detaljert gjennomgang av hvert lag, alle åtte pipeline-steg, datasett-skjemaene
 og begrunnelsen bak hver avveiing ligger i
@@ -195,6 +199,26 @@ mer verdt enn et imponerende tall ingen kan etterprøve.
 **Ikke attendance.** `matches_purchased_12m` teller kjøp, ikke oppmøte.
 Plattformen har ingen billettscan-kilde, og produktet later ikke som den har det.
 
+### Isolert ML-eksperiment — fan-segmentering
+
+Det eksplorative eksperimentet bruker 540 syntetiske fans og syv numeriske
+treningsfeatures for recency, kamper, transaksjoner, billetter, forbruk,
+kanselleringer og refusjoner. Ingen PII, kontaktdata, samtykke, `fan_id`,
+tidspunkt eller `rule_segment` brukes i treningen.
+
+K-means-kandidater fra `k=2` til `k=6` spores med hosted MLflow. `k=4` ble valgt
+med silhouette `0.6392`, men `k=2` var nesten lik med `0.6388`; fire segmenter er
+derfor ikke entydig bedre enn to. Den valgte løsningen har segmentstørrelsene
+115, 77, 67 og 281. Stabilitet ARI var `1.0` på tvers av faste seeds på dette
+syntetiske datasettet. ARI mot `rule_segment` var omtrent `0.3133`; dette er et
+mål på likhet mellom partisjoneringer, ikke accuracy, og `rule_segment` er ikke
+ground truth.
+
+Eksperimentet er teknisk vellykket, men eksplisitt ikke produksjonsklart. Det
+demonstrerer metode og sporbarhet uten å etablere forretningsverdi på reelle
+supportere. Resultater, tolkning og krav før eventuell produksjon er dokumentert
+i [ML- og AI-strategien](docs/ml-ai-strategy.md).
+
 ## 5. Governance
 
 ```text
@@ -213,7 +237,11 @@ I praksis:
   App-only fans får ukjent, ikke et implisitt avslag. `False` er en beslutning
   tatt av en person; ukjent er en mangel hos plattformen.
 - **`marketing_allowed` krever både** eksplisitt samtykke og en kontaktbar
-  e-post. Et segment beskriver atferd — samtykket avgjør handling.
+	e-post. Et segment beskriver atferd — samtykket avgjør handling.
+- **ML-segmentet endrer aldri `marketing_allowed`.** Eksperimentet produserer
+	analyse, ikke en rett til å kontakte noen.
+- **Ingen automatisert supporterbeslutning** tas av modellen. Det er heller ikke
+	opprettet modellregistrering eller serving endpoint.
 - **`push_opt_in` er en kanalpreferanse**, ikke marketing consent.
 - **Bygget avvises** hvis samtykket ble oppdatert etter valgt `--as-of`, slik at
   en målgruppeliste aldri bygger på en status som ikke fantes på
@@ -238,6 +266,7 @@ Spark, Delta, dbt og orkestrering.
 | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
 | Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
 | Prediktiv aktiveringsscore | Uten attendance- og app-events ville modellen lært av de samme kjøpene den allerede rapporterer | Når event-data faktisk finnes |
+| Produksjons-MLOps | Eksperimentet har MLflow-sporing, men ikke registry og approval, serving, modell- og datamonitorering, drift detection eller automatisk retrening | Når en faglig validert modell har eierskap, produksjonsdata, godkjenningsflyt, overvåking og eksplisitte retreningskriterier |
 | Fan-match-produkt | Krysser to domener og reiser reelle spørsmål om tilgang og dataminimering som fortjener en beslutning, ikke en snarvei | Når både konsument og tilgangsmodell er definert |
 | Produksjonsklar tilgangskontroll og retention per datasett | S3-landing har grunnsikring og lifecycle, men supporterproduktene er fortsatt lokale prototypefiler | Før behandling av data om ekte personer |
 
@@ -265,8 +294,9 @@ historiske observasjoner for ferdigspilte kamper.
 - **Lokal referanseimplementasjon:** Python 3.9+, `requests`, `python-dotenv`,
 	pandas, pyarrow, Parquet, `unittest` og `unittest.mock`.
 - **Cloud-utvidelse:** AWS S3, Databricks, Apache Spark, Delta Lake, Unity
-	Catalog, Lakeflow Jobs, dbt og Databricks Declarative Automation Bundles.
-- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 98
+	Catalog, Lakeflow Jobs, dbt, scikit-learn, hosted MLflow og Databricks
+	Declarative Automation Bundles.
+- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 113
 	unit-tester, offline `dbt parse` og Terraform-validering.
 
 ## Kom i gang
@@ -313,6 +343,7 @@ python3 -m src.build_gold
 python3 -m src.generate_fan_data
 python3 -m src.build_fan_silver
 python3 -m src.build_fan_gold --as-of 2026-08-22
+python3 -m src.build_ml_features
 ```
 
 Hva hvert steg gjør, hvilke avveiinger som ligger bak og hvilke tall det
@@ -373,13 +404,14 @@ Kjør hele testsuiten uten live API-kall:
 python3 -m unittest discover -s tests -v
 ```
 
-98 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
+113 tester bruker mocks og midlertidige mapper. De dekker HTTP-feil, credentials,
 caching, rå byte-lagring, deduplisering, canonical venue-ID-er, weather-serie-
 valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
 canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
-fan-segmentering, consent-aware aktivering, validering og Parquet-skriving.
+fan-segmentering, consent-aware aktivering, ML-featurebygging, validering og
+Spark-kompatibel Parquet-skriving.
 
-GitHub Actions kjører compile-kontroll og alle 98 testene på både Python 3.9 og
+GitHub Actions kjører compile-kontroll og alle 113 testene på både Python 3.9 og
 3.12. Separate jobber kjører offline `dbt parse` og Terraform-formatkontroll,
 `init -backend=false` og `validate` uten AWS-credentials. Automatisk
 Terraform-plan og apply er ikke implementert. Bundlen er validert og den
@@ -402,7 +434,8 @@ git diff --check
 ├── data/
 │   ├── bronze/
 │   ├── silver/
-│   └── gold/
+│   ├── gold/
+│   └── ml/
 ├── docs/
 │   ├── data/
 │   │   └── visualizations.json
@@ -410,7 +443,8 @@ git diff --check
 │   ├── app.js
 │   ├── styles.css
 │   ├── architecture.md
-│   └── governance.md
+│   ├── governance.md
+│   └── ml-ai-strategy.md
 ├── databricks/
 │   ├── notebooks/
 │   └── bundle/
@@ -434,7 +468,8 @@ git diff --check
 │   ├── build_gold.py
 │   ├── generate_fan_data.py
 │   ├── build_fan_silver.py
-│   └── build_fan_gold.py
+│   ├── build_fan_gold.py
+│   └── build_ml_features.py
 ├── tests/
 ├── .env.example
 ├── requirements.txt
