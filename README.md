@@ -1,5 +1,7 @@
 # Football Club Data Platform
 
+[![CI](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml)
+
 ![Oversikt over Football Club Data Platform](docs/images/football-club-data-platform-overview.png)
 
 En liten, komplett referanseimplementasjon av et **klubbeid datafundament**:
@@ -16,8 +18,8 @@ er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
 | | |
 |---|---|
 | **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
-| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Databricks, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, GitHub Actions |
-| **Omfang** | 3 eksterne API-er · 8 pipeline-steg · 6 Silver-datasett · 2 Gold-dataprodukter · 98 tester |
+| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Terraform, Databricks, Databricks Asset Bundles, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, GitHub Actions |
+| **Resultat** | 3 API-er · 34 S3-filer · 21 Gold-kamper · 540 syntetiske fans · 98 tester |
 | **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
 | **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) |
 
@@ -277,8 +279,6 @@ python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fyll inn følgende i `.env`:
-
 ```dotenv
 FOOTBALLDATA_API_KEY=your_api_key_here
 FROST_CLIENT_ID=your_client_id_here
@@ -440,5 +440,6 @@ git diff --check
 - All supporterdata er syntetisk, se
   [docs/governance.md](docs/governance.md#syntetiske-data).
 
-Repoet har foreløpig ingen egen `LICENSE`-fil. Legg til en eksplisitt kode-lisens
-før prosjektet distribueres eller gjenbrukes offentlig.
+Koden er lisensiert under [MIT-lisensen](LICENSE). Lisensen omfatter ikke
+eksterne rådata; disse følger vilkårene, lisensene og attribution-kravene til
+de respektive kildene som angitt over.

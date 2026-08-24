@@ -220,5 +220,6 @@ kjøring og konfigurasjon er foreløpig manuelt styrt.
 - API-nøkler ligger i `.env`, som er ignorert av Git. Ingen credentials er
   committet til repoet.
 
-Repoet har foreløpig ingen `LICENSE`-fil. En eksplisitt kode-lisens bør legges
-til før prosjektet distribueres eller gjenbrukes offentlig.
+Koden er lisensiert under [MIT-lisensen](../LICENSE). Lisensen omfatter ikke
+eksterne rådata; disse følger vilkårene, lisensene og attribution-kravene til
+de respektive kildene som angitt over.
