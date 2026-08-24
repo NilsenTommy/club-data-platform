@@ -47,7 +47,7 @@ Prinsippene er ikke pyntetekst — hver av dem har en konkret konsekvens i koden
 
 | Lag | Eier | Ansvar | Endringsregel |
 |---|---|---|---|
-| **Bronze** | Kildesystemet | Innhold og korrekthet i den opprinnelige responsen | Filer er immutable. Ny spørring gir ny fil, aldri overskriving. |
+| **Bronze** | Kildesystemet | Innhold og korrekthet i den opprinnelige responsen | Lokalt er filer immutable. Cloud raw landing er versjonert, og Databricks har read-only tilgang. |
 | **Silver** | Plattformen | Canonical modell, nøkler, typing, deduplisering, validering | Skjemaendringer skal være bakoverkompatible eller varslet til konsumenter. |
 | **Gold** | Forretningsdomenet | Definisjon av mål, segmenter og grain | Endret definisjon av et mål er en produktendring, ikke en teknisk detalj. |
 
@@ -65,6 +65,10 @@ Domenene er bevisst holdt fra hverandre. Et framtidig fan-match-produkt vil
 krysse dem, og det er da tilgangsstyring og dataminimering blir en reell
 beslutning i stedet for en teoretisk.
 
+Cloud-utvidelsen omfatter bare sport/kamp. De 34 råfilene fra FootballData,
+Nominatim og Frost ligger i S3, mens supporterdata med syntetiske
+personidentifiserende felter med vilje ikke er flyttet dit.
+
 ## Persondata og dataminimering
 
 ### Hva som finnes hvor
@@ -81,6 +85,13 @@ beslutning i stedet for en teoretisk.
 
 - **Kampdomenet er persondatafritt.** `match_insights.parquet` inneholder ingen
   supporterdata, og kan derfor deles bredere enn fan-produktene.
+- **Privat og skrivebeskyttet cloud-landing.** S3-bøtten har Block Public
+  Access, Bucket Owner Enforced, SSE-S3 og versjonering. Unity Catalog external
+  location `clubdata_landing_s3` er read-only og eksponeres gjennom
+  `/Volumes/clubdata/bronze/landing_s3`.
+- **Lifecycle for rådata i S3.** Gamle ikke-gjeldende versjoner slettes etter
+  30 dager, to nyere ikke-gjeldende versjoner beholdes, og ufullstendige
+  multipart-opplastinger avbrytes etter 7 dager.
 - **Pseudonyme nøkler nedstrøms.** `silver_ticket_sales` bærer `fan_id`, ikke
   kontaktfelter. Atferdsanalyse krever dermed ikke tilgang til e-post.
 - **Aggregering før publisering.** Datagrunnlaget til den statiske webappen er et
@@ -93,8 +104,9 @@ beslutning i stedet for en teoretisk.
 `fan_activation.parquet` inneholder e-post fordi produktet er ment for direkte
 målgruppeuttrekk. Det gjør det til det mest sensitive datasettet i prosjektet.
 En reell løsning må beskytte det med rollebasert tilgangskontroll, logging av
-uttrekk og en retention-policy — ingen av delene finnes i dagens filbaserte
-prototype.
+uttrekk og en retention-policy. S3-sikringen og lifecycle-reglene gjelder bare
+det persondatafrie kampdomenet; disse kontrollene finnes ikke for dagens lokale
+supporterprototype.
 
 ## Samtykke og aktivering
 
@@ -174,17 +186,23 @@ Dette er gapene jeg ville tatt tak i først, i denne rekkefølgen.
 
 | # | Gap | Konsekvens i dag | Plan |
 |---|---|---|---|
-| 1 | Ingen tilgangskontroll | Alle med filsystemtilgang kan lese `fan_activation.parquet` med e-post | Rollebasert tilgang per datasett, med fan-produktene som eget nivå |
+| 1 | Ingen tilgangskontroll for lokale supporterprodukter | Alle med filsystemtilgang kan lese `fan_activation.parquet` med e-post | Rollebasert tilgang per datasett, med fan-produktene som eget nivå |
 | 2 | Consent er et snapshot | Kan ikke svare på hva som var lov på et tidligere tidspunkt | Historisert consent som event- eller SCD-modell |
-| 3 | Ingen retention-policy | Data ligger til noen sletter dem manuelt | Definert levetid per datasett, med automatisk sletting |
+| 3 | Ingen retention-policy for lokale supporterdata | Supporterdata ligger til noen sletter dem manuelt; S3-lifecycle gjelder bare kampdata | Definert levetid per datasett, med automatisk sletting |
 | 4 | Ingen sletteflyt for enkeltpersoner | Ingen mekanisme for å etterkomme en sletteforespørsel | Sletting propagert fra kilde gjennom Silver og Gold via `fan_identities` |
 | 5 | Ingen formelle data contracts | Konsumenter har ingen skjema- eller SLA-garanti | Versjonert skjema og eierskap per datasett i `docs/` |
 | 6 | Ingen lineage-metadata | Opphavet til en verdi må leses ut av koden | Eksplisitt lineage mellom kamp, venue, station og observation |
 | 7 | Ingen audit av uttrekk | Ingen sporing av hvem som hentet en målgruppeliste | Logging av uttrekk fra aktiveringsproduktet |
 | 8 | Secrets i lokal `.env` | Fungerer lokalt, skalerer ikke til et team | Secrets manager med rotasjon |
+| 9 | Cloud-infrastruktur er ikke IaC | S3, IAM og Unity Catalog er manuelt opprettet og vanskeligere å reprodusere | Terraform og Databricks Asset Bundles |
+| 10 | Ingen automatisk CD | GitHub Actions validerer, men deployer eller starter ikke Databricks-jobben | Automatisert deploy og jobbstart med miljøspesifikke godkjenninger |
 
 Prioriteringen følger risiko, ikke teknisk interesse: tilgang til persondata før
 skjemagarantier, og sletteflyt før lineage.
+
+GitHub Actions kjører CI med compile-kontroll, 98 unit-tester på Python 3.9 og
+3.12 og offline `dbt parse`. Dette er ikke full CD. Databricks-jobben leser
+`main`, men kjøring og konfigurasjon er foreløpig manuelt styrt.
 
 ## Lisenser og attribution
 

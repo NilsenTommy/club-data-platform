@@ -5,7 +5,8 @@
 En liten, komplett referanseimplementasjon av et **klubbeid datafundament**:
 reelle kampdata, stadiondata og historiske værobservasjoner kombinert med en
 helsyntetisk supporterpopulasjon, foredlet gjennom **Bronze → Silver → Gold** til
-to analyseklare dataprodukter.
+to analyseklare dataprodukter. Den opprinnelige lokale pandas/Parquet-versjonen
+er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
 
 > [!IMPORTANT]
 > Dette er en teknisk demonstrasjon og et læringsprosjekt, ikke en
@@ -15,7 +16,7 @@ to analyseklare dataprodukter.
 | | |
 |---|---|
 | **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
-| **Stack** | Python 3.9, pandas, pyarrow, Parquet, `unittest` |
+| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Databricks, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, GitHub Actions |
 | **Omfang** | 3 eksterne API-er · 8 pipeline-steg · 6 Silver-datasett · 2 Gold-dataprodukter · 98 tester |
 | **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
 | **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) |
@@ -51,6 +52,14 @@ Målet er *ikke* å demonstrere flest mulig verktøy. Hvert valg skal kunne
 forsvares med problemet det løser.
 
 ## 3. Arkitektur
+
+Prosjektet har to implementasjonsspor. Den lokale referanseimplementasjonen kan
+kjøres ende-til-ende fra repoet og bruker filer, pandas og Parquet. Cloud-
+utvidelsen behandler de samme rå kamp-, stadion- og værdataene med S3 som
+landing zone og Databricks som lakehouse. Supporterdata er med vilje bare i den
+lokale implementasjonen og er ikke flyttet til S3.
+
+### Lokal referanseimplementasjon
 
 ```mermaid
 flowchart TD
@@ -90,6 +99,37 @@ flowchart TD
 
 Gold leser bare Silver. Silver leser bare Bronze. Ingen steg hopper over et lag,
 og ingen steg skriver tilbake til en kilde.
+
+### Cloud-utvidelse
+
+```mermaid
+flowchart LR
+	S3[AWS S3 raw landing] --> EL[Unity Catalog external location<br/>read-only]
+	EL --> V[External volume<br/>/Volumes/clubdata/bronze/landing_s3]
+	V --> B[Bronze Delta]
+	B --> S[Silver Delta]
+	S --> G[dbt Gold Delta]
+	G --> DQ[Datakvalitetskontroller]
+	LJ[Lakeflow Jobs] -. orkestrerer notebook- og dbt-steg .-> B
+	LJ -.-> S
+	LJ -.-> G
+	LJ -.-> DQ
+	CI[GitHub Actions CI] -. validerer .-> R[Repo-kode]
+	R -. main, manuelt styrt .-> LJ
+```
+
+Den private S3-bøtten `clubdata-platform-landing-portfolio` inneholder 34
+råfiler: 1 fra FootballData, 11 fra Nominatim, 14 Frost source-responser og 8
+Frost observation-responser. Block Public Access, Bucket Owner Enforced,
+SSE-S3 og versjonering er aktivert. Lifecycle-reglene sletter gamle
+ikke-gjeldende versjoner etter 30 dager, beholder to nyere ikke-gjeldende
+versjoner og avbryter ufullstendige multipart-opplastinger etter 7 dager.
+
+Databricks eksponerer bøtten gjennom den read-only external location-en
+`clubdata_landing_s3` og Unity Catalog-volumet
+`/Volumes/clubdata/bronze/landing_s3`. Notebookene bygger Bronze og Silver som
+Delta-tabeller, mens Gold-tabellen `match_insights` bygges med dbt. Lakeflow
+Jobs orkestrerer notebook- og dbt-stegene.
 
 Detaljert gjennomgang av hvert lag, alle åtte pipeline-steg, datasett-skjemaene
 og begrunnelsen bak hver avveiing ligger i
@@ -175,19 +215,20 @@ Eierskapsmodell, dataminimering, kjente gap og prioritert plan står i
 
 ## 6. Hva jeg bevisst ikke bygde
 
-Det er lett å legge til verktøy. Det som er verdt å vise, er hvorfor de ikke er
-lagt til ennå.
+Den lokale implementasjonen er bevisst liten selv om cloud-utvidelsen viser
+hvordan de samme prinsippene kan realiseres med en katalog, objektlagring,
+Spark, Delta, dbt og orkestrering.
 
 | Ikke bygget | Hvorfor ikke | Når det ville lønt seg |
 |---|---|---|
-| Orkestrering (Airflow, Dagster) | Åtte steg i fast rekkefølge kjøres like godt fra en kommandolinje | Så snart kjøringene må planlegges, gjenopptas etter feil og overvåkes |
-| Spark, DuckDB eller dbt | Datasettet er lite nok til pandas. En motor uten et problem å løse skjuler prinsippene bak verktøy | Ved volum eller transformasjonsmengde som gjør SQL-modellering billigere enn Python |
+| Automatisk CD | GitHub Actions validerer kode, men deployer eller starter ikke Databricks-jobben | Når deploy og jobbstart kan automatiseres med tydelig miljø- og godkjenningsmodell |
+| Infrastructure as Code | S3, IAM og Unity Catalog er opprettet manuelt | Terraform og Databricks Asset Bundles er naturlige neste steg |
 | Valideringsrammeverk | Eksplisitt Python viser *hva* som valideres og hvorfor, uten et rammeverk å lære først | Når reglene skal deles og håndheves på tvers av team |
 | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
 | Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
 | Prediktiv aktiveringsscore | Uten attendance- og app-events ville modellen lært av de samme kjøpene den allerede rapporterer | Når event-data faktisk finnes |
 | Fan-match-produkt | Krysser to domener og reiser reelle spørsmål om tilgang og dataminimering som fortjener en beslutning, ikke en snarvei | Når både konsument og tilgangsmodell er definert |
-| Tilgangskontroll og retention | Prototypen er filbasert og har én bruker | Umiddelbart, hvis data om ekte personer var involvert |
+| Produksjonsklar tilgangskontroll og retention per datasett | S3-landing har grunnsikring og lifecycle, men supporterproduktene er fortsatt lokale prototypefiler | Før behandling av data om ekte personer |
 
 Full liste over prototypebegrensninger står i
 [docs/architecture.md](docs/architecture.md#kjente-begrensninger), og
@@ -210,12 +251,12 @@ historiske observasjoner for ferdigspilte kamper.
 
 ## Teknologi
 
-- Python 3.9+
-- `requests` for HTTP
-- `python-dotenv` for lokal konfigurasjon
-- `pandas` for tabulære transformasjoner
-- `pyarrow` for Parquet
-- `unittest` og `unittest.mock` for tester
+- **Lokal referanseimplementasjon:** Python 3.9+, `requests`, `python-dotenv`,
+	pandas, pyarrow, Parquet, `unittest` og `unittest.mock`.
+- **Cloud-utvidelse:** AWS S3, Databricks, Apache Spark, Delta Lake, Unity
+	Catalog, Lakeflow Jobs og dbt.
+- **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 98
+	unit-tester og offline `dbt parse`.
 
 ## Kom i gang
 
@@ -329,6 +370,11 @@ valg, valg av vær ved kampstart, resultatlogikk, supporterfragmentering,
 canonical fan-kobling, deterministiske CSV-/Parquet-filer, datatyper,
 fan-segmentering, consent-aware aktivering, validering og Parquet-skriving.
 
+GitHub Actions kjører compile-kontroll og alle 98 testene på både Python 3.9 og
+3.12. En separat jobb kjører offline `dbt parse`. Dette er CI, ikke full CD:
+workflowen deployer ikke og starter ikke Databricks-jobben. Jobben leser
+`main`, men kjøring og konfigurasjon er foreløpig manuelt styrt.
+
 Nyttige tilleggskontroller:
 
 ```bash
@@ -352,6 +398,13 @@ git diff --check
 │   ├── styles.css
 │   ├── architecture.md
 │   └── governance.md
+├── databricks/
+│   └── notebooks/
+├── dbt/
+│   ├── models/
+│   └── tests/
+├── .github/
+│   └── workflows/
 ├── src/
 │   ├── fetch_matches.py
 │   ├── geocode_venues.py
