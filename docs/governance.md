@@ -194,15 +194,17 @@ Dette er gapene jeg ville tatt tak i først, i denne rekkefølgen.
 | 6 | Ingen lineage-metadata | Opphavet til en verdi må leses ut av koden | Eksplisitt lineage mellom kamp, venue, station og observation |
 | 7 | Ingen audit av uttrekk | Ingen sporing av hvem som hentet en målgruppeliste | Logging av uttrekk fra aktiveringsproduktet |
 | 8 | Secrets i lokal `.env` | Fungerer lokalt, skalerer ikke til et team | Secrets manager med rotasjon |
-| 9 | Cloud-infrastruktur er ikke IaC | S3, IAM og Unity Catalog er manuelt opprettet og vanskeligere å reprodusere | Terraform og Databricks Asset Bundles |
+| 9 | IaC er bare delvis implementert | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, men IAM, Databricks storage credential, external location, external volume og Lakeflow-jobben administreres manuelt | Terraform og Databricks Asset Bundles for de gjenværende ressursene |
 | 10 | Ingen automatisk CD | GitHub Actions validerer, men deployer eller starter ikke Databricks-jobben | Automatisert deploy og jobbstart med miljøspesifikke godkjenninger |
 
 Prioriteringen følger risiko, ikke teknisk interesse: tilgang til persondata før
 skjemagarantier, og sletteflyt før lineage.
 
 GitHub Actions kjører CI med compile-kontroll, 98 unit-tester på Python 3.9 og
-3.12 og offline `dbt parse`. Dette er ikke full CD. Databricks-jobben leser
-`main`, men kjøring og konfigurasjon er foreløpig manuelt styrt.
+3.12, offline `dbt parse` og Terraform-formatkontroll, `init -backend=false` og
+`validate` uten AWS-credentials. Automatisk Terraform-plan og apply er ikke
+implementert. Dette er ikke full CD. Databricks-jobben leser `main`, men
+kjøring og konfigurasjon er foreløpig manuelt styrt.
 
 ## Lisenser og attribution
 

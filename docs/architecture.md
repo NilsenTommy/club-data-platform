@@ -130,7 +130,10 @@ Supporterdata er med vilje ikke flyttet til S3. Bøtten har Block Public Access,
 Bucket Owner Enforced, SSE-S3 og versjonering. Lifecycle sletter gamle
 ikke-gjeldende objektversjoner etter 30 dager, beholder to nyere
 ikke-gjeldende versjoner og avbryter ufullstendige multipart-opplastinger etter
-7 dager.
+7 dager. Bøtten og sikkerhetskonfigurasjonen administreres med Terraform i
+`infra/terraform/aws-s3/`. Den eksisterende bøtten ble importert i lokal state,
+ikke gjenskapt; etter apply viste Terraform-planen `0 add, 0 change, 0 destroy`.
+Lokal state er ignorert og ikke committet.
 
 ### Databricks lakehouse
 
@@ -145,11 +148,15 @@ dbt-prosjektet i `dbt/`, etterfulgt av datakvalitetskontroller. Lakeflow Jobs
 orkestrerer notebook- og dbt-stegene i denne rekkefølgen.
 
 GitHub Actions-workflowen i `.github/workflows/` er CI: den kjører compile-
-kontroll og 98 unit-tester på Python 3.9 og 3.12 samt offline `dbt parse`.
+kontroll og 98 unit-tester på Python 3.9 og 3.12, offline `dbt parse` og
+Terraform-formatkontroll, `init -backend=false` og `validate` uten
+AWS-credentials. Automatisk Terraform-plan og apply er ikke implementert.
 Workflowen deployer ikke kode og starter ikke Lakeflow-jobben. Databricks-jobben
-leser `main`, men kjøring og konfigurasjon er foreløpig manuelt styrt. S3, IAM
-og Unity Catalog er også opprettet manuelt; Terraform og Databricks Asset
-Bundles er naturlige neste steg for IaC og deploy.
+leser `main`, men kjøring og konfigurasjon er foreløpig manuelt styrt. IAM,
+Databricks storage credential, external location, external volume og
+Lakeflow-jobben administreres fortsatt manuelt. IaC er derfor delvis
+implementert; Terraform og Databricks Asset Bundles er neste steg for de
+gjenværende ressursene.
 
 ## Pipelinesteg
 
@@ -510,7 +517,7 @@ validering og Parquet-skriving.
 | Lokal filbasert Bronze med hash i filnavn | Bare cloud-basert lagring | Beholder en inspiserbar, kjørbar referanseimplementasjon ved siden av den versjonerte S3-landingen. |
 | Lokal Parquet + pandas og cloud Spark + Delta + dbt | Erstatte lokal implementasjon | Den lokale flyten viser transformasjonslogikken med få avhengigheter; cloud-utvidelsen viser katalog, tabellformat, SQL-modellering og orkestrering. |
 | Read-only external location | Skrivetilgang til raw landing fra Databricks | Bevarer rådata som mottatt og hindrer transformasjonssteg i å mutere landingssonen. |
-| Manuelt opprettet cloud-infrastruktur | IaC fra første prototype | Verifiserer arkitekturen med liten oppstartskostnad; Terraform og Databricks Asset Bundles er neste steg for repeterbarhet. |
+| Delvis IaC for cloud-infrastruktur | Full IaC fra første prototype | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt; Terraform og Databricks Asset Bundles er neste steg for IAM- og Databricks-ressursene. |
 | Eksplisitt validering i Python | Great Expectations, Pandera | Får fram *hva* som valideres og hvorfor, uten et rammeverk å lære seg først. Et rammeverk lønner seg når reglene deles på tvers av team. |
 | Full refresh av Silver og Gold | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementell load krever watermark, sen ankomst og korreksjonshåndtering — reell kompleksitet uten reell gevinst her. |
 | Deterministisk regelbasert identitetskobling | Probabilistisk matching / ML | En konservativ regel er forklarbar og reviderbar. Et sannsynlighetsscore uten fasit ville gitt tall ingen kan etterprøve. |
@@ -529,7 +536,9 @@ Bevisste prototypebegrensninger i dagens kode:
 - Ingen generell konfigurasjon av tidsvinduer eller datakilder.
 - Lakeflow Jobs orkestrerer cloud-flyten, men kjøring og konfigurasjon er manuelt
   styrt og har ikke automatisk CD fra GitHub.
-- S3, IAM og Unity Catalog mangler IaC og er opprettet manuelt.
+- IAM, Databricks storage credential, external location, external volume og
+  Lakeflow-jobben mangler IaC og administreres manuelt. Automatisk
+  Terraform-plan og apply er ikke implementert.
 - Første geocoding-resultat velges automatisk, uten manuell kvalitetssikring.
 - Silver og Gold bygges som full refresh.
 - Identitetskoblingen bruker bare unik normalisert e-post, og håndterer ikke
