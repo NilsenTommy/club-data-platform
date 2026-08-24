@@ -1,0 +1,25 @@
+# Terraform for S3-landingssone
+
+Dette oppsettet administrerer konfigurasjonen til den eksisterende S3-bøtten for landingssonen: selve bøtten, blokkering av offentlig tilgang, object ownership, versjonering, server-side-kryptering og lifecycle-regelen. ACL, bucket policy, IAM, Databricks og Unity Catalog er ikke en del av oppsettet.
+
+## Lokal state og import
+
+Ressursene finnes allerede i AWS og må importeres før første plan. Terraform-state er foreløpig lokal. State- og planfiler kan inneholde sensitiv informasjon og skal aldri committes.
+
+Kjør kommandoene fra denne katalogen. Profilen er ikke hardkodet i provider-konfigurasjonen; AWS SDKs standard credential chain brukes.
+
+```bash
+AWS_PROFILE=clubdata-iac terraform init
+AWS_PROFILE=clubdata-iac terraform validate
+
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket.landing clubdata-platform-landing-portfolio
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket_public_access_block.landing clubdata-platform-landing-portfolio
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket_ownership_controls.landing clubdata-platform-landing-portfolio
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket_versioning.landing clubdata-platform-landing-portfolio
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket_server_side_encryption_configuration.landing clubdata-platform-landing-portfolio
+AWS_PROFILE=clubdata-iac terraform import aws_s3_bucket_lifecycle_configuration.landing clubdata-platform-landing-portfolio
+
+AWS_PROFILE=clubdata-iac terraform plan -detailed-exitcode
+```
+
+Gjennomgå alltid hele `terraform plan` før en eventuell `terraform apply`. Remote state, IAM og Databricks-ressurser er senere steg og skal innføres separat.
