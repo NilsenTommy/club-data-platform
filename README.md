@@ -16,7 +16,7 @@ er beholdt, og kampdomenet er i tillegg utvidet til AWS S3 og Databricks.
 | | |
 |---|---|
 | **Domene** | Fotballklubb, med FK Bodø/Glimt som eksempel |
-| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Databricks, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, GitHub Actions |
+| **Stack** | Python 3.9+, pandas, Parquet, AWS S3, Databricks, Apache Spark, Delta Lake, Unity Catalog, Lakeflow Jobs, dbt, Databricks Declarative Automation Bundles, GitHub Actions |
 | **Omfang** | 3 eksterne API-er · 8 pipeline-steg · 6 Silver-datasett · 2 Gold-dataprodukter · 98 tester |
 | **Kjennetegn** | Deterministisk output, kildeuavhengig modell, eksplisitt datakvalitet, consent-aware aktivering |
 | **Dybdedokumentasjon** | [Arkitektur](docs/architecture.md) · [Governance](docs/governance.md) |
@@ -115,7 +115,8 @@ flowchart LR
 	LJ -.-> G
 	LJ -.-> DQ
 	CI[GitHub Actions CI] -. validerer .-> R[Repo-kode]
-	R -. main, manuelt styrt .-> LJ
+	R --> DB[Databricks Declarative Automation Bundle<br/>dev-target]
+	DB -. manuell deploy og kjøring .-> LJ
 ```
 
 Den private S3-bøtten `clubdata-platform-landing-portfolio` inneholder 34
@@ -132,7 +133,11 @@ Databricks eksponerer bøtten gjennom den read-only external location-en
 `clubdata_landing_s3` og Unity Catalog-volumet
 `/Volumes/clubdata/bronze/landing_s3`. Notebookene bygger Bronze og Silver som
 Delta-tabeller, mens Gold-tabellen `match_insights` bygges med dbt. Lakeflow
-Jobs orkestrerer notebook- og dbt-stegene.
+Jobs orkestrerer notebook- og dbt-stegene. Jobbdefinisjonen for development
+ligger som en Databricks Declarative Automation Bundle i `databricks/bundle/`
+med lokale `WORKSPACE`-kilder for notebooks og dbt. En separat dev-jobb er
+deployet manuelt, og hele seks-task-kjeden er testkjørt med `SUCCESS`. Den
+eksisterende hovedjobben ble verken bundet til eller endret av deployen.
 
 Detaljert gjennomgang av hvert lag, alle åtte pipeline-steg, datasett-skjemaene
 og begrunnelsen bak hver avveiing ligger i
@@ -224,8 +229,8 @@ Spark, Delta, dbt og orkestrering.
 
 | Ikke bygget | Hvorfor ikke | Når det ville lønt seg |
 |---|---|---|
-| Automatisk CD | GitHub Actions validerer kode, men deployer eller starter ikke Databricks-jobben | Når deploy og jobbstart kan automatiseres med tydelig miljø- og godkjenningsmodell |
-| Komplett Infrastructure as Code | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, mens IAM, Databricks storage credential, external location, external volume og Lakeflow-jobben fortsatt administreres manuelt | Terraform og Databricks Asset Bundles er neste steg for de gjenværende ressursene |
+| Automatisk CD | Bundle-deploy og kjøring av dev-jobben er manuell. GitHub Actions har ingen Databricks-credentials og deployer eller starter ikke Databricks-jobber | Når deploy og jobbstart kan automatiseres med tydelig miljø- og godkjenningsmodell |
+| Komplett Infrastructure as Code | S3-bøtten og sikkerhetskonfigurasjonen er Terraform-styrt, og Lakeflow-jobbdefinisjonen er Bundle-styrt for dev. IAM, storage credential, external location, external volume, produksjonstarget/binding og automatisk bundle-deploy er ikke IaC/CD | Når de gjenværende ressursene kan forvaltes med miljøskille, sikker state og godkjent produksjonsprosess |
 | Valideringsrammeverk | Eksplisitt Python viser *hva* som valideres og hvorfor, uten et rammeverk å lære først | Når reglene skal deles og håndheves på tvers av team |
 | Inkrementell load | Full refresh er trivielt reproduserbart. Inkrementelt krever watermark, sen ankomst og korreksjoner | Når historikken gjør full refresh for dyr |
 | Probabilistisk identitetsmatching | En konservativ regel er forklarbar og reviderbar; et sannsynlighetsscore uten fasit er det ikke | Med en manuell gjennomgangsflyt og faktisk verifisering |
@@ -257,9 +262,9 @@ historiske observasjoner for ferdigspilte kamper.
 - **Lokal referanseimplementasjon:** Python 3.9+, `requests`, `python-dotenv`,
 	pandas, pyarrow, Parquet, `unittest` og `unittest.mock`.
 - **Cloud-utvidelse:** AWS S3, Databricks, Apache Spark, Delta Lake, Unity
-	Catalog, Lakeflow Jobs og dbt.
+	Catalog, Lakeflow Jobs, dbt og Databricks Declarative Automation Bundles.
 - **CI:** GitHub Actions med Python 3.9 og 3.12, compile-kontroll, 98
-	unit-tester og offline `dbt parse`.
+	unit-tester, offline `dbt parse` og Terraform-validering.
 
 ## Kom i gang
 
@@ -376,9 +381,11 @@ fan-segmentering, consent-aware aktivering, validering og Parquet-skriving.
 GitHub Actions kjører compile-kontroll og alle 98 testene på både Python 3.9 og
 3.12. Separate jobber kjører offline `dbt parse` og Terraform-formatkontroll,
 `init -backend=false` og `validate` uten AWS-credentials. Automatisk
-Terraform-plan og apply er ikke implementert. Dette er CI, ikke full CD:
-workflowen deployer ikke og starter ikke Databricks-jobben. Jobben leser
-`main`, men kjøring og konfigurasjon er foreløpig manuelt styrt.
+Terraform-plan og apply er ikke implementert. Bundlen er validert og den
+separate dev-jobben er testkjørt lokalt med autentisert Databricks CLI. GitHub
+Actions har ingen Databricks-credentials, deployer ikke bundlen og starter ikke
+Databricks-jobber. Deploy og kjøring er derfor fortsatt manuell, og dette er CI,
+ikke full CD.
 
 Nyttige tilleggskontroller:
 
@@ -404,7 +411,12 @@ git diff --check
 │   ├── architecture.md
 │   └── governance.md
 ├── databricks/
-│   └── notebooks/
+│   ├── notebooks/
+│   └── bundle/
+│       ├── databricks.yml
+│       ├── README.md
+│       └── resources/
+│           └── clubdata_job.yml
 ├── dbt/
 │   ├── models/
 │   └── tests/

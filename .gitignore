@@ -1,4 +1,5 @@
 .env
+.databricks/
 
 # Terraform working directories and local state
 .terraform/
