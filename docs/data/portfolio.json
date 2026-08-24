@@ -1,0 +1,1136 @@
+{
+  "metadata": {
+    "schemaVersion": 1,
+    "club": "FK Bodø/Glimt",
+    "title": "Klubbdata",
+    "ticketsProxyNote": "Tallene viser solgte billetter, ikke hvor mange som møtte opp. Det finnes ingen data fra innslippet.",
+    "syntheticNote": "Kamp-, stadion- og værdata er ekte. Supporterdataene er laget for demonstrasjon.",
+    "sources": {
+      "matches": {
+        "dataset": "data/gold/match_insights.parquet",
+        "grain": "Én rad per kamp",
+        "dataThroughAt": "2026-08-19"
+      },
+      "tickets": {
+        "dataset": "data/gold/match_ticket_sales.parquet",
+        "grain": "Én rad per kamp"
+      },
+      "supporters": {
+        "dataset": "data/gold/fan_segment_summary.parquet",
+        "grain": "Én rad per engasjementssegment",
+        "asOfAt": "2026-08-22T00:00:00Z",
+        "windowStartAt": "2025-08-22T00:00:00Z"
+      },
+      "ml": {
+        "dataset": "data/ml/fan_segmentation_summary.json",
+        "grain": "Aggregerte målinger per kandidat og per ML-segment",
+        "snapshotAt": "2026-08-22T00:00:00Z"
+      }
+    }
+  },
+  "overview": {
+    "questions": [
+      {
+        "id": "demand",
+        "view": "matches",
+        "title": "Kamper og billettsalg",
+        "summary": "Alle 21 kampene med resultat, antall solgte billetter og været ved avspark."
+      },
+      {
+        "id": "activation",
+        "view": "supporters",
+        "title": "Supportere og samtykke",
+        "summary": "540 supportere fordelt etter hvor mye de kjøper, og hvem klubben har lov til å kontakte."
+      },
+      {
+        "id": "segmentation",
+        "view": "ml",
+        "title": "Forsøk med maskinlæring",
+        "summary": "Kan en modell finne grupper i supporterdataene som de vanlige reglene ikke fanger opp?"
+      }
+    ],
+    "findings": [
+      {
+        "id": "home-advantage",
+        "view": "matches",
+        "title": "Hjemmekamper selger langt flere billetter",
+        "value": "2,60×",
+        "unit": "så mange billetter hjemme som borte",
+        "tabs": {
+          "see": "Hjemmekampene solgte i snitt 450 billetter, mot 173 på bortekamp. Tallene dekker 9 hjemmekamper og 12 bortekamper.",
+          "missing": "Dette er solgte billetter, ikke oppmøte. Det finnes ingen data på hvem som faktisk kom. Billettdataene er dessuten laget for demonstrasjon.",
+          "decision": "Tallet omtales alltid som solgte billetter, aldri som publikumstall."
+        }
+      },
+      {
+        "id": "weather-coverage",
+        "view": "matches",
+        "title": "Værdata mangler for de fleste kampene",
+        "value": "8/21",
+        "unit": "kamper har temperatur",
+        "tabs": {
+          "see": "8 av 21 kamper har temperatur. Bare 7 har både temperatur, nedbør og vind.",
+          "missing": "Værtjenesten dekker norske målestasjoner. For bortekamper i Europa finnes ingen stasjon nær nok, og feltene står tomme.",
+          "decision": "Kamper uten måling står uten vær, i stedet for et gjettet tall. Ingen konklusjon trekkes om hvordan været påvirker salget."
+        }
+      },
+      {
+        "id": "activation-funnel",
+        "view": "supporters",
+        "title": "Halvparten av supporterne kan klubben kontakte",
+        "value": "278",
+        "unit": "av 540 kan kontaktes",
+        "tabs": {
+          "see": "Av 540 supportere har 283 sagt ja til å bli kontaktet. 278 av dem har også oppgitt en e-postadresse.",
+          "missing": "142 har sagt nei. For 115 er det ukjent, fordi de ikke er koblet til billettsystemet. Det er en mangel i dataene, ikke et nei fra dem.",
+          "decision": "En supporter må ha sagt ja og ha en e-postadresse. Hvor aktiv vedkommende er, spiller ingen rolle."
+        }
+      },
+      {
+        "id": "ml-marginal",
+        "view": "ml",
+        "title": "Maskinlæringen ga for liten gevinst",
+        "value": "0,00033",
+        "unit": "poeng bedre enn den enkleste inndelingen",
+        "tabs": {
+          "see": "Modellen delte supporterne i 4 grupper, men ble bare 0,00033 poeng bedre enn med 2 grupper.",
+          "missing": "Dataene er laget for demonstrasjon, og ingen har vist at inndelingen faktisk ville hjulpet klubben.",
+          "decision": "Forsøket er dokumentert, men modellen er ikke tatt i bruk."
+        }
+      }
+    ]
+  },
+  "matches": {
+    "club": "FK Bodø/Glimt",
+    "totals": {
+      "matchCount": 21,
+      "totalTickets": 6123,
+      "firstDate": "2024-10-03",
+      "lastDate": "2026-08-19"
+    },
+    "homeAway": {
+      "home": {
+        "matchCount": 9,
+        "totalTickets": 4049,
+        "averageTickets": 449.9,
+        "medianTickets": 447.0
+      },
+      "away": {
+        "matchCount": 12,
+        "totalTickets": 2074,
+        "averageTickets": 172.8,
+        "medianTickets": 174.0
+      },
+      "ratio": 2.6
+    },
+    "weatherCoverage": {
+      "matchCount": 21,
+      "withTemperature": 8,
+      "withCompleteWeather": 7,
+      "withCoordinates": 14,
+      "definition": "Komplett vær betyr temperatur, nedbør og vind fra samme observasjon."
+    },
+    "opponents": [
+      "Atlético Madrid",
+      "Borussia Dortmund",
+      "Galatasaray",
+      "Inter Milan",
+      "Juventus",
+      "Lazio",
+      "Manchester City",
+      "Monaco",
+      "NEC",
+      "Olympiakos Piraeus",
+      "Slavia Praha",
+      "Sporting CP",
+      "Tottenham Hotspur",
+      "Union Saint-Gilloise"
+    ],
+    "competitions": [
+      "UEFA Champions League",
+      "UEFA Europa League"
+    ],
+    "rows": [
+      {
+        "matchId": 1526992464,
+        "date": "2024-10-03",
+        "kickoffAt": "2024-10-03T19:00:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": false,
+        "opponent": "Union Saint-Gilloise",
+        "ticketsSold": 163,
+        "result": "draw",
+        "homeScore": 0,
+        "awayScore": 0,
+        "stadiumName": null,
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 178578,
+        "date": "2025-03-06",
+        "kickoffAt": "2025-03-06T20:00:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": true,
+        "opponent": "Olympiakos Piraeus",
+        "ticketsSold": 447,
+        "result": "win",
+        "homeScore": 3,
+        "awayScore": 0,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2025-03-06T20:00:00Z",
+          "temperatureC": 2.8,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 9.3
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 178586,
+        "date": "2025-03-13",
+        "kickoffAt": "2025-03-13T17:45:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": false,
+        "opponent": "Olympiakos Piraeus",
+        "ticketsSold": 147,
+        "result": "loss",
+        "homeScore": 2,
+        "awayScore": 1,
+        "stadiumName": "Stadio Georgios Karaiskáki (Pireás (Piraeus))",
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 179580,
+        "date": "2025-04-17",
+        "kickoffAt": "2025-04-17T19:00:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": false,
+        "opponent": "Lazio",
+        "ticketsSold": 139,
+        "result": "loss",
+        "homeScore": 3,
+        "awayScore": 1,
+        "stadiumName": "Stadio Olimpico (Roma)",
+        "country": "Italy",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 180514,
+        "date": "2025-05-01",
+        "kickoffAt": "2025-05-01T19:00:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": false,
+        "opponent": "Tottenham Hotspur",
+        "ticketsSold": 173,
+        "result": "loss",
+        "homeScore": 3,
+        "awayScore": 1,
+        "stadiumName": null,
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 180515,
+        "date": "2025-05-08",
+        "kickoffAt": "2025-05-08T19:00:00Z",
+        "competition": "UEFA Europa League",
+        "season": 20242025,
+        "isHome": true,
+        "opponent": "Tottenham Hotspur",
+        "ticketsSold": 411,
+        "result": "loss",
+        "homeScore": 0,
+        "awayScore": 2,
+        "stadiumName": null,
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 197209,
+        "date": "2025-09-17",
+        "kickoffAt": "2025-09-17T16:45:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Slavia Praha",
+        "ticketsSold": 172,
+        "result": "draw",
+        "homeScore": 2,
+        "awayScore": 2,
+        "stadiumName": null,
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 200468,
+        "date": "2025-09-30",
+        "kickoffAt": "2025-09-30T19:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Tottenham Hotspur",
+        "ticketsSold": 473,
+        "result": "draw",
+        "homeScore": 2,
+        "awayScore": 2,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2025-09-30T19:00:00Z",
+          "temperatureC": 9.6,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 1.0
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 200406,
+        "date": "2025-10-22",
+        "kickoffAt": "2025-10-22T16:45:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Galatasaray",
+        "ticketsSold": 177,
+        "result": "loss",
+        "homeScore": 3,
+        "awayScore": 1,
+        "stadiumName": null,
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 200439,
+        "date": "2025-11-04",
+        "kickoffAt": "2025-11-04T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Monaco",
+        "ticketsSold": 442,
+        "result": "loss",
+        "homeScore": 0,
+        "awayScore": 1,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2025-11-04T20:00:00Z",
+          "temperatureC": 8.2,
+          "precipitationMm": 0.4,
+          "windSpeedMs": 5.7
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 200399,
+        "date": "2025-11-25",
+        "kickoffAt": "2025-11-25T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Juventus",
+        "ticketsSold": 438,
+        "result": "loss",
+        "homeScore": 2,
+        "awayScore": 3,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2025-11-25T20:00:00Z",
+          "temperatureC": 3.5,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 8.8
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 200384,
+        "date": "2025-12-10",
+        "kickoffAt": "2025-12-10T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Borussia Dortmund",
+        "ticketsSold": 199,
+        "result": "draw",
+        "homeScore": 2,
+        "awayScore": 2,
+        "stadiumName": "Signal-Iduna-Park",
+        "country": "Germany",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 200377,
+        "date": "2026-01-20",
+        "kickoffAt": "2026-01-20T17:45:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Manchester City",
+        "ticketsSold": 435,
+        "result": "win",
+        "homeScore": 3,
+        "awayScore": 1,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2026-01-20T17:40:00Z",
+          "temperatureC": 0.0,
+          "precipitationMm": null,
+          "windSpeedMs": 8.8
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 200364,
+        "date": "2026-01-28",
+        "kickoffAt": "2026-01-28T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Atlético Madrid",
+        "ticketsSold": 201,
+        "result": "win",
+        "homeScore": 1,
+        "awayScore": 2,
+        "stadiumName": "Estadio Wanda Metropolitano",
+        "country": null,
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": false,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 208487,
+        "date": "2026-02-18",
+        "kickoffAt": "2026-02-18T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Inter Milan",
+        "ticketsSold": 472,
+        "result": "win",
+        "homeScore": 3,
+        "awayScore": 1,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2026-02-18T20:00:00Z",
+          "temperatureC": -2.4,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 6.7
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 208477,
+        "date": "2026-02-24",
+        "kickoffAt": "2026-02-24T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Inter Milan",
+        "ticketsSold": 179,
+        "result": "win",
+        "homeScore": 1,
+        "awayScore": 2,
+        "stadiumName": "Stadio Giuseppe Meazza",
+        "country": "Italy",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 210390,
+        "date": "2026-03-11",
+        "kickoffAt": "2026-03-11T20:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": true,
+        "opponent": "Sporting CP",
+        "ticketsSold": 472,
+        "result": "win",
+        "homeScore": 3,
+        "awayScore": 0,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2026-03-11T20:00:00Z",
+          "temperatureC": 7.8,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 4.1
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 210382,
+        "date": "2026-03-17",
+        "kickoffAt": "2026-03-17T17:45:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20252026,
+        "isHome": false,
+        "opponent": "Sporting CP",
+        "ticketsSold": 181,
+        "result": "loss",
+        "homeScore": 5,
+        "awayScore": 0,
+        "stadiumName": "Estádio José Alvalade",
+        "country": "Portugal",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 1442247121,
+        "date": "2026-08-04",
+        "kickoffAt": "2026-08-04T18:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20262027,
+        "isHome": false,
+        "opponent": "Union Saint-Gilloise",
+        "ticketsSold": 175,
+        "result": "draw",
+        "homeScore": 3,
+        "awayScore": 3,
+        "stadiumName": "Stade Joseph Mariën",
+        "country": "Belgium",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      },
+      {
+        "matchId": 1866528531,
+        "date": "2026-08-11",
+        "kickoffAt": "2026-08-11T16:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20262027,
+        "isHome": true,
+        "opponent": "Union Saint-Gilloise",
+        "ticketsSold": 459,
+        "result": "win",
+        "homeScore": 3,
+        "awayScore": 2,
+        "stadiumName": "Aspmyra Stadion",
+        "country": "Norway",
+        "weather": {
+          "observedAt": "2026-08-11T16:00:00Z",
+          "temperatureC": 11.3,
+          "precipitationMm": 0.0,
+          "windSpeedMs": 7.7
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": true,
+          "hasCompleteWeather": true
+        }
+      },
+      {
+        "matchId": 2079863826,
+        "date": "2026-08-19",
+        "kickoffAt": "2026-08-19T19:00:00Z",
+        "competition": "UEFA Champions League",
+        "season": 20262027,
+        "isHome": false,
+        "opponent": "NEC",
+        "ticketsSold": 168,
+        "result": "win",
+        "homeScore": 1,
+        "awayScore": 3,
+        "stadiumName": "Goffertstadion",
+        "country": "Netherlands",
+        "weather": {
+          "observedAt": null,
+          "temperatureC": null,
+          "precipitationMm": null,
+          "windSpeedMs": null
+        },
+        "coverage": {
+          "hasCoordinates": true,
+          "hasTemperature": false,
+          "hasCompleteWeather": false
+        }
+      }
+    ]
+  },
+  "supporters": {
+    "totalFans": 540,
+    "asOfAt": "2026-08-22T00:00:00Z",
+    "windowStartAt": "2025-08-22T00:00:00Z",
+    "consent": {
+      "granted": 283,
+      "declined": 142,
+      "unknown": 115,
+      "grantedShare": 52.4
+    },
+    "activatable": 278,
+    "activatableShare": 51.5,
+    "funnel": [
+      {
+        "id": "canonical",
+        "label": "Alle supportere",
+        "count": 540,
+        "note": "Slått sammen fra billettsystemet og supporterappen."
+      },
+      {
+        "id": "consent",
+        "label": "Har sagt ja",
+        "count": 283,
+        "note": "142 har sagt nei. For 115 er det ukjent, fordi de ikke er koblet til billettsystemet."
+      },
+      {
+        "id": "activatable",
+        "label": "Kan kontaktes",
+        "count": 278,
+        "note": "Har både sagt ja og oppgitt en e-postadresse."
+      }
+    ],
+    "segments": [
+      {
+        "segment": "INACTIVE",
+        "label": "Inaktiv",
+        "rule": "Har ikke kjøpt billett de siste 12 månedene",
+        "count": 115,
+        "share": 21.3,
+        "activatable": 0,
+        "medians": {
+          "matchesPurchased": 0.0,
+          "purchaseTransactions": 0.0,
+          "ticketsPurchased": 0.0,
+          "totalSpend": 0.0
+        }
+      },
+      {
+        "segment": "OCCASIONAL",
+        "label": "Sporadisk",
+        "rule": "Har kjøpt billett til 1–2 kamper",
+        "count": 13,
+        "share": 2.4,
+        "activatable": 8,
+        "medians": {
+          "matchesPurchased": 2.0,
+          "purchaseTransactions": 2.0,
+          "ticketsPurchased": 3.0,
+          "totalSpend": 740.0
+        }
+      },
+      {
+        "segment": "ENGAGED",
+        "label": "Engasjert",
+        "rule": "Har kjøpt billett til 3–5 kamper",
+        "count": 206,
+        "share": 38.1,
+        "activatable": 141,
+        "medians": {
+          "matchesPurchased": 4.0,
+          "purchaseTransactions": 4.0,
+          "ticketsPurchased": 7.0,
+          "totalSpend": 2335.0
+        }
+      },
+      {
+        "segment": "HIGHLY_ENGAGED",
+        "label": "Svært engasjert",
+        "rule": "Har kjøpt billett til 6 kamper eller flere",
+        "count": 206,
+        "share": 38.1,
+        "activatable": 129,
+        "medians": {
+          "matchesPurchased": 7.0,
+          "purchaseTransactions": 7.0,
+          "ticketsPurchased": 12.0,
+          "totalSpend": 3815.0
+        }
+      }
+    ],
+    "governance": {
+      "consentSource": "Billettsystemet er kilden til hvem som har sagt ja.",
+      "activationRule": "Det kreves både et ja og en e-postadresse.",
+      "separation": "Hvor aktiv en supporter er, sier ingenting om klubben har lov til å kontakte vedkommende.",
+      "synthetic": "Supporterdataene er laget for demonstrasjon og tilhører ikke ekte personer."
+    }
+  },
+  "ml": {
+    "snapshotAt": "2026-08-22T00:00:00Z",
+    "windowStartAt": "2025-08-22T00:00:00Z",
+    "notebook": "07_ml_fan_segmentation",
+    "selectionRunId": null,
+    "promotion": {
+      "promotedAt": "2026-08-24",
+      "source": "local_reproduction",
+      "note": "Tallene bygger på data fra 22. august 2026."
+    },
+    "setup": {
+      "rowCount": 540,
+      "randomState": 42,
+      "nInit": 20,
+      "features": [
+        "recency_days",
+        "matches_purchased_12m",
+        "purchase_transactions_12m",
+        "tickets_purchased_12m",
+        "total_spend_12m",
+        "cancelled_transactions_12m",
+        "refunded_transactions_12m"
+      ],
+      "stabilitySeeds": [
+        7,
+        19,
+        43,
+        73,
+        101
+      ],
+      "pipeline": "log1p → standardisering → K-means"
+    },
+    "selection": {
+      "selectedK": 4,
+      "baselineK": 2,
+      "selectedSilhouette": 0.6391666,
+      "baselineSilhouette": 0.6388378,
+      "silhouetteDelta": 0.0003288,
+      "deltaLabel": "0,00033",
+      "rule": "Høyest poengsum vinner",
+      "caveat": "Forskjellen mellom 4 og 2 grupper er bare 0,00033 poeng. 4 grupper er altså knapt bedre enn 2, så inndelingen bør regnes som en antakelse.",
+      "candidates": [
+        {
+          "k": 2,
+          "valid": true,
+          "silhouetteScore": 0.6388378,
+          "inertia": 1523.1907,
+          "minimumClusterSize": 117,
+          "minimumClusterShare": 21.67,
+          "stabilityAriMean": 1.0,
+          "stabilityAriMinimum": 1.0,
+          "selected": false
+        },
+        {
+          "k": 3,
+          "valid": true,
+          "silhouetteScore": 0.5822753,
+          "inertia": 1011.8039,
+          "minimumClusterSize": 68,
+          "minimumClusterShare": 12.59,
+          "stabilityAriMean": 1.0,
+          "stabilityAriMinimum": 1.0,
+          "selected": false
+        },
+        {
+          "k": 4,
+          "valid": true,
+          "silhouetteScore": 0.6391666,
+          "inertia": 570.8235,
+          "minimumClusterSize": 67,
+          "minimumClusterShare": 12.41,
+          "stabilityAriMean": 1.0,
+          "stabilityAriMinimum": 1.0,
+          "selected": true
+        },
+        {
+          "k": 5,
+          "valid": true,
+          "silhouetteScore": 0.5647993,
+          "inertia": 410.5804,
+          "minimumClusterSize": 67,
+          "minimumClusterShare": 12.41,
+          "stabilityAriMean": 1.0,
+          "stabilityAriMinimum": 1.0,
+          "selected": false
+        },
+        {
+          "k": 6,
+          "valid": true,
+          "silhouetteScore": 0.5638179,
+          "inertia": 351.1528,
+          "minimumClusterSize": 37,
+          "minimumClusterShare": 6.85,
+          "stabilityAriMean": 1.0,
+          "stabilityAriMinimum": 1.0,
+          "selected": false
+        }
+      ]
+    },
+    "profiles": [
+      {
+        "segment": "ML_01",
+        "label": "Ingen aktivitet",
+        "interpretation": "Ingen kjøp de siste 12 månedene.",
+        "count": 115,
+        "share": 21.3,
+        "medians": {
+          "recency_days": 366.0,
+          "matches_purchased_12m": 0.0,
+          "purchase_transactions_12m": 0.0,
+          "tickets_purchased_12m": 0.0,
+          "total_spend_12m": 0.0,
+          "cancelled_transactions_12m": 0.0,
+          "refunded_transactions_12m": 0.0
+        }
+      },
+      {
+        "segment": "ML_02",
+        "label": "Mange refusjoner",
+        "interpretation": "Kjøper jevnlig, men får refundert oftere enn andre.",
+        "count": 77,
+        "share": 14.3,
+        "medians": {
+          "recency_days": 42.0,
+          "matches_purchased_12m": 5.0,
+          "purchase_transactions_12m": 5.0,
+          "tickets_purchased_12m": 9.0,
+          "total_spend_12m": 2790.0,
+          "cancelled_transactions_12m": 0.0,
+          "refunded_transactions_12m": 1.0
+        }
+      },
+      {
+        "segment": "ML_03",
+        "label": "Mange kanselleringer",
+        "interpretation": "Kjøper jevnlig, men kansellerer oftere enn andre.",
+        "count": 67,
+        "share": 12.4,
+        "medians": {
+          "recency_days": 59.0,
+          "matches_purchased_12m": 5.0,
+          "purchase_transactions_12m": 5.0,
+          "tickets_purchased_12m": 9.0,
+          "total_spend_12m": 3050.0,
+          "cancelled_transactions_12m": 1.0,
+          "refunded_transactions_12m": 0.0
+        }
+      },
+      {
+        "segment": "ML_04",
+        "label": "Bredt aktiv",
+        "interpretation": "Den største gruppen. Kjøper jevnlig uten mange kanselleringer eller refusjoner.",
+        "count": 281,
+        "share": 52.0,
+        "medians": {
+          "recency_days": 55.0,
+          "matches_purchased_12m": 6.0,
+          "purchase_transactions_12m": 6.0,
+          "tickets_purchased_12m": 9.0,
+          "total_spend_12m": 3040.0,
+          "cancelled_transactions_12m": 0.0,
+          "refunded_transactions_12m": 0.0
+        }
+      }
+    ],
+    "ruleComparison": {
+      "adjustedRandIndex": 0.3133,
+      "ruleSegments": [
+        {
+          "segment": "INACTIVE",
+          "label": "Inaktiv"
+        },
+        {
+          "segment": "OCCASIONAL",
+          "label": "Sporadisk"
+        },
+        {
+          "segment": "ENGAGED",
+          "label": "Engasjert"
+        },
+        {
+          "segment": "HIGHLY_ENGAGED",
+          "label": "Svært engasjert"
+        }
+      ],
+      "crossTab": [
+        {
+          "segment": "ML_01",
+          "total": 115,
+          "cells": [
+            {
+              "ruleSegment": "INACTIVE",
+              "label": "Inaktiv",
+              "count": 115,
+              "share": 100.0
+            },
+            {
+              "ruleSegment": "OCCASIONAL",
+              "label": "Sporadisk",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "ENGAGED",
+              "label": "Engasjert",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "HIGHLY_ENGAGED",
+              "label": "Svært engasjert",
+              "count": 0,
+              "share": 0.0
+            }
+          ]
+        },
+        {
+          "segment": "ML_02",
+          "total": 77,
+          "cells": [
+            {
+              "ruleSegment": "INACTIVE",
+              "label": "Inaktiv",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "OCCASIONAL",
+              "label": "Sporadisk",
+              "count": 3,
+              "share": 3.9
+            },
+            {
+              "ruleSegment": "ENGAGED",
+              "label": "Engasjert",
+              "count": 42,
+              "share": 54.5
+            },
+            {
+              "ruleSegment": "HIGHLY_ENGAGED",
+              "label": "Svært engasjert",
+              "count": 32,
+              "share": 41.6
+            }
+          ]
+        },
+        {
+          "segment": "ML_03",
+          "total": 67,
+          "cells": [
+            {
+              "ruleSegment": "INACTIVE",
+              "label": "Inaktiv",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "OCCASIONAL",
+              "label": "Sporadisk",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "ENGAGED",
+              "label": "Engasjert",
+              "count": 39,
+              "share": 58.2
+            },
+            {
+              "ruleSegment": "HIGHLY_ENGAGED",
+              "label": "Svært engasjert",
+              "count": 28,
+              "share": 41.8
+            }
+          ]
+        },
+        {
+          "segment": "ML_04",
+          "total": 281,
+          "cells": [
+            {
+              "ruleSegment": "INACTIVE",
+              "label": "Inaktiv",
+              "count": 0,
+              "share": 0.0
+            },
+            {
+              "ruleSegment": "OCCASIONAL",
+              "label": "Sporadisk",
+              "count": 10,
+              "share": 3.6
+            },
+            {
+              "ruleSegment": "ENGAGED",
+              "label": "Engasjert",
+              "count": 125,
+              "share": 44.5
+            },
+            {
+              "ruleSegment": "HIGHLY_ENGAGED",
+              "label": "Svært engasjert",
+              "count": 146,
+              "share": 52.0
+            }
+          ]
+        }
+      ],
+      "note": "Tallet viser hvor likt modellen og reglene deler inn supporterne. 1 betyr helt likt, 0 betyr ingen sammenheng. Det finnes ingen fasit her – reglene er bare en annen måte å dele inn på."
+    },
+    "guardrails": [
+      {
+        "check": "Ingen personopplysninger eller samtykkedata ble brukt til å trene modellen",
+        "passed": true
+      },
+      {
+        "check": "Om en supporter kan kontaktes, påvirket verken modellen eller resultatet",
+        "passed": true
+      },
+      {
+        "check": "Resultatet inneholder bare supporter-ID, modellgruppe og regelbasert gruppe",
+        "passed": true
+      }
+    ],
+    "decision": {
+      "verdict": "Interessant forsøk, men ikke godt nok til å tas i bruk",
+      "reasons": [
+        "Dataene er laget for demonstrasjon, så funnene sier ingenting om ekte supportere.",
+        "Modellen ble knapt bedre av å dele inn i fire grupper framfor to.",
+        "Ingen har vist at inndelingen faktisk ville hjulpet klubben."
+      ],
+      "notRegistered": [
+        "modellen er ikke registrert",
+        "den har ikke et serving-endepunkt",
+        "den tar ingen automatiserte supporterbeslutninger"
+      ]
+    }
+  }
+}

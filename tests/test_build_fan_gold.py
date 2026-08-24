@@ -122,6 +122,37 @@ class BuildFanGoldTests(unittest.TestCase):
 		self.assertEqual(fan["matches_purchased_12m"], 2)
 		self.assertEqual(fan["total_spend_12m"], 400.0)
 
+	def test_builds_pii_free_segment_summary(self):
+		summary = build_fan_gold.build_fan_segment_summary(self.build()).set_index(
+			"engagement_segment"
+		)
+
+		self.assertEqual(
+			list(summary.reset_index().columns),
+			build_fan_gold.FAN_SEGMENT_SUMMARY_COLUMNS,
+		)
+		self.assertEqual(int(summary["fan_count"].sum()), 4)
+		self.assertEqual(summary.loc["INACTIVE", "fan_count"], 3)
+		self.assertEqual(summary.loc["INACTIVE", "consent_unknown_count"], 1)
+		self.assertEqual(summary.loc["OCCASIONAL", "activatable_count"], 1)
+		self.assertEqual(summary.loc["OCCASIONAL", "total_spend_median"], 400.0)
+		self.assertFalse(
+			{"fan_id", "primary_email", "display_name"}.intersection(summary.columns)
+		)
+
+	def test_segment_summary_output_is_deterministic(self):
+		first = build_fan_gold.build_fan_segment_summary(self.build())
+		second = build_fan_gold.build_fan_segment_summary(self.build())
+
+		with tempfile.TemporaryDirectory() as first_directory, tempfile.TemporaryDirectory() as second_directory:
+			first_path = build_fan_gold.write_fan_segment_summary(
+				first, Path(first_directory)
+			)
+			second_path = build_fan_gold.write_fan_segment_summary(
+				second, Path(second_directory)
+			)
+			self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
+
 	def test_last_engagement_is_all_time_completed_purchase_before_as_of(self):
 		frame = self.build().set_index("fan_id")
 

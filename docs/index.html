@@ -3,104 +3,246 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Tre enkle visualiseringer av kampdata, vær og supporterengasjement.">
-  <title>Klubbdata | Kamp og supportere</title>
-  <link rel="stylesheet" href="./styles.css?v=2">
-  <script src="./app.js?v=2" defer></script>
+  <meta name="description" content="Kamper, billettsalg, vær og supportertall for FK Bodø/Glimt, samlet på ett sted.">
+  <title>Klubbdata</title>
+  <link rel="stylesheet" href="./styles.css?v=8">
+  <script src="./app.js?v=8" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#view-title">Hopp til hovedinnhold</a>
+
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Hovednavigasjon">
-      <a class="brand" href="#top" aria-label="Klubbdata oversikt">
+    <aside class="sidebar">
+      <a class="brand" href="#overview">
         <span class="brand__mark" aria-hidden="true">KG</span>
-        <span class="brand__text"><strong>Klubbdata</strong><small>Insights</small></span>
+        <span class="brand__text"><strong>Klubbdata</strong><small>Bodø/Glimt</small></span>
       </a>
 
-      <nav class="nav">
-        <p class="nav__label">Arbeidsflate</p>
-        <a class="nav__link nav__link--active" href="#top"><span>01</span>Oversikt</a>
-        <a class="nav__link" href="#matches"><span>02</span>Kamper</a>
-        <a class="nav__link" href="#weather"><span>03</span>Vær</a>
-        <a class="nav__link" href="#fans"><span>04</span>Supportere</a>
+      <nav class="nav" aria-label="Hovednavigasjon">
+        <p class="nav__label" id="nav-label">Innhold</p>
+        <ul class="nav__list" aria-labelledby="nav-label">
+          <li><a class="nav__link" href="#overview" data-route="overview"><span aria-hidden="true">01</span>Oversikt</a></li>
+          <li><a class="nav__link" href="#matches" data-route="matches"><span aria-hidden="true">02</span>Kamper</a></li>
+          <li><a class="nav__link" href="#supporters" data-route="supporters"><span aria-hidden="true">03</span>Supportere</a></li>
+          <li><a class="nav__link" href="#ml" data-route="ml"><span aria-hidden="true">04</span>Maskinlæring</a></li>
+        </ul>
       </nav>
 
       <div class="sidebar__status">
         <span class="status-dot" aria-hidden="true"></span>
-        <span><strong>Datagrunnlag</strong><small>Statisk uttrekk</small></span>
+        <span><strong>Supportertall</strong><small id="sidebar-snapshot">Laster …</small></span>
       </div>
     </aside>
 
-    <div class="workspace" id="top">
+    <div class="workspace">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Analyseoversikt</p>
-          <h1>Kamp og supportere</h1>
+        <div class="topbar__heading">
+          <p class="eyebrow" id="view-kicker">Oversikt</p>
+          <h1 id="view-title" tabindex="-1">Klubbdata</h1>
         </div>
         <div class="topbar__meta">
-          <span>Club Data Platform</span>
-          <strong id="updated-at">Laster data …</strong>
+          <span>FK Bodø/Glimt</span>
+          <strong id="topbar-snapshot">Laster data …</strong>
         </div>
       </header>
 
-      <main class="dashboard">
-        <section class="summary" id="summary" aria-label="Nøkkeltall">
-          <p class="loading">Laster datagrunnlag …</p>
+      <main class="dashboard" id="main">
+        <p class="view-lead" id="view-lead"></p>
+
+        <section class="view" id="view-overview" aria-labelledby="view-title" hidden>
+          <div class="question-grid" id="overview-questions"></div>
+          <h2 class="section-heading">Hovedtall</h2>
+          <div class="finding-grid" id="overview-findings"></div>
         </section>
 
-        <aside class="data-note">
-          <span class="data-note__accent" aria-hidden="true"></span>
-          <p><strong>Om oppmøtetallene</strong> Fullførte billettkjøp brukes som proxy fordi registrert attendance ikke finnes i kildedataene.</p>
-        </aside>
-
-        <section class="analytics-card attendance-card" id="matches" aria-labelledby="attendance-title">
-          <header class="card-header">
-            <div>
-              <p class="card-kicker">Match performance</p>
-              <h2 id="attendance-title">Solgte billetter per kamp</h2>
+        <section class="view" id="view-matches" aria-labelledby="view-title" hidden>
+          <form class="controls" id="match-filters" aria-label="Filtrer kamper">
+            <div class="control">
+              <label for="filter-side">Kamptype</label>
+              <select id="filter-side" name="side">
+                <option value="all">Alle kamper</option>
+                <option value="home">Hjemme</option>
+                <option value="away">Borte</option>
+              </select>
             </div>
-            <span class="card-meta" id="attendance-count">Alle kamper</span>
-          </header>
-          <div id="attendance-chart" class="match-chart" aria-live="polite"></div>
+            <div class="control">
+              <label for="filter-opponent">Motstander</label>
+              <select id="filter-opponent" name="opponent">
+                <option value="all">Alle motstandere</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="filter-from">Fra dato</label>
+              <input type="date" id="filter-from" name="from">
+            </div>
+            <div class="control">
+              <label for="filter-to">Til dato</label>
+              <input type="date" id="filter-to" name="to">
+            </div>
+            <div class="control">
+              <label for="filter-weather">Vær</label>
+              <select id="filter-weather" name="weather">
+                <option value="all">Alle kamper</option>
+                <option value="temperature">Har temperatur</option>
+                <option value="complete">Har temperatur, nedbør og vind</option>
+                <option value="missing">Mangler værdata</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="filter-sort">Sortering</label>
+              <select id="filter-sort" name="sort">
+                <option value="date-desc">Dato, nyeste først</option>
+                <option value="date-asc">Dato, eldste først</option>
+                <option value="tickets-desc">Billetter, flest først</option>
+                <option value="tickets-asc">Billetter, færrest først</option>
+                <option value="temperature-desc">Temperatur, høyest først</option>
+              </select>
+            </div>
+            <button class="button button--ghost" type="reset">Nullstill</button>
+          </form>
+
+          <div class="result-bar">
+            <p class="result-count" id="match-count" role="status"></p>
+            <div class="segmented" role="group" aria-label="Visningstype for kamper">
+              <button type="button" class="segmented__button" data-chart="bars" aria-pressed="true">Stolper</button>
+              <button type="button" class="segmented__button" data-chart="timeline" aria-pressed="false">Tidslinje</button>
+              <button type="button" class="segmented__button" data-chart="table" aria-pressed="false">Tabell</button>
+            </div>
+          </div>
+
+          <section class="analytics-card" aria-labelledby="match-chart-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Billettsalg</p>
+                <h2 id="match-chart-title">Solgte billetter per kamp</h2>
+              </div>
+              <span class="card-meta" id="match-chart-meta"></span>
+            </header>
+            <div id="match-chart"></div>
+          </section>
+
+          <aside class="data-note">
+            <span class="data-note__accent" aria-hidden="true"></span>
+            <p id="match-proxy-note"></p>
+          </aside>
         </section>
 
-        <div class="insight-grid">
-          <section class="analytics-card" id="weather" aria-labelledby="weather-title">
-            <header class="card-header">
-              <div>
-                <p class="card-kicker">Match + vær</p>
-                <h2 id="weather-title">Temperatur og regn</h2>
-              </div>
-              <span class="card-meta" id="weather-count">Målte kamper</span>
-            </header>
-            <div id="weather-chart" class="weather-chart" aria-live="polite"></div>
-          </section>
+        <section class="view" id="view-supporters" aria-labelledby="view-title" hidden>
+          <div class="insight-grid insight-grid--supporters">
+            <section class="analytics-card" aria-labelledby="funnel-title">
+              <header class="card-header">
+                <div>
+                  <p class="card-kicker">Samtykke</p>
+                  <h2 id="funnel-title">Hvem kan klubben kontakte?</h2>
+                </div>
+                <span class="card-meta" id="funnel-meta"></span>
+              </header>
+              <div id="supporter-funnel"></div>
+            </section>
 
-          <section class="analytics-card" id="fans" aria-labelledby="segments-title">
+            <section class="analytics-card" aria-labelledby="consent-title">
+              <header class="card-header">
+                <div>
+                  <p class="card-kicker">Fordeling</p>
+                  <h2 id="consent-title">Ja, nei og vet ikke</h2>
+                </div>
+              </header>
+              <div id="consent-split"></div>
+            </section>
+          </div>
+
+          <section class="analytics-card" aria-labelledby="segment-title">
             <header class="card-header">
               <div>
-                <p class="card-kicker">Supporterbase</p>
-                <h2 id="segments-title">Engasjementssegmenter</h2>
+                <p class="card-kicker">Aktivitet</p>
+                <h2 id="segment-title">Hvor mye kjøper supporterne?</h2>
               </div>
-              <span class="card-meta" id="segment-count">Alle supportere</span>
+              <span class="card-meta" id="segment-meta"></span>
             </header>
-            <div class="segment-frame">
-              <div id="segment-chart" class="segment-chart" aria-live="polite"></div>
+            <div class="segment-explorer">
+              <div class="segment-list" id="segment-list" role="group" aria-label="Velg gruppe"></div>
+              <div class="segment-detail" id="segment-detail" aria-live="polite"></div>
             </div>
           </section>
-        </div>
+
+          <aside class="data-note">
+            <span class="data-note__accent" aria-hidden="true"></span>
+            <p id="supporter-governance-note"></p>
+          </aside>
+        </section>
+
+        <section class="view" id="view-ml" aria-labelledby="view-title" hidden>
+          <section class="analytics-card" aria-labelledby="ml-selection-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Antall grupper</p>
+                <h2 id="ml-selection-title">Hvor mange grupper passer best?</h2>
+              </div>
+              <span class="card-meta" id="ml-selection-meta"></span>
+            </header>
+            <div id="ml-silhouette"></div>
+            <p class="caveat" id="ml-caveat"></p>
+          </section>
+
+          <section class="analytics-card" aria-labelledby="ml-profile-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Gruppene</p>
+                <h2 id="ml-profile-title">Hva kjennetegner hver gruppe?</h2>
+              </div>
+              <span class="card-meta" id="ml-profile-meta"></span>
+            </header>
+            <div id="ml-profiles"></div>
+          </section>
+
+          <section class="analytics-card" aria-labelledby="ml-crosstab-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Sammenligning</p>
+                <h2 id="ml-crosstab-title">Hvordan overlapper ML-gruppene og de regelbaserte segmentene?</h2>
+              </div>
+              <span class="card-meta" id="ml-crosstab-meta"></span>
+            </header>
+            <div id="ml-crosstab"></div>
+            <p class="caveat" id="ml-ari-note"></p>
+          </section>
+
+          <section class="analytics-card" aria-labelledby="ml-guardrail-title">
+            <header class="card-header">
+              <div>
+                <p class="card-kicker">Personvern</p>
+                <h2 id="ml-guardrail-title">Sjekker gjort underveis</h2>
+              </div>
+            </header>
+            <ul class="coverage-list" id="ml-guardrails"></ul>
+          </section>
+
+          <aside class="data-note">
+            <span class="data-note__accent" aria-hidden="true"></span>
+            <p id="ml-provenance-note"></p>
+          </aside>
+        </section>
       </main>
 
       <footer class="footer">
-        <p>Klubbdata Insights</p>
-        <p>Bygget på aggregerte Gold- og Silver-data</p>
+        <p>Klubbdata</p>
+        <p id="footer-note">Bygget på oppsummerte tall uten persondata</p>
       </footer>
     </div>
   </div>
 
+  <dialog class="match-dialog" id="match-dialog" aria-labelledby="match-dialog-title">
+    <form method="dialog" class="match-dialog__actions">
+      <button class="button button--ghost" value="close">Lukk</button>
+    </form>
+    <h2 id="match-dialog-title"></h2>
+    <div id="match-dialog-body"></div>
+  </dialog>
+
   <template id="error-template">
     <div class="error" role="alert">
-      <strong>Kunne ikke laste visualiseringene.</strong>
-      <span>Kontroller at siden kjøres via en webserver og at datafilen finnes.</span>
+      <strong>Kunne ikke laste datagrunnlaget.</strong>
+      <span>Kontroller at siden kjøres via en webserver og at datafilen <code>data/portfolio.json</code> finnes.</span>
     </div>
   </template>
 </body>
