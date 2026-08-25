@@ -1,5 +1,4 @@
-# Klubbdata: fra spredte kilder til bedre beslutninger
-
+# Klubbdata
 [![CI](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/NilsenTommy/club-data-platform/actions/workflows/ci.yml)
 
 ![Oversikt over Klubbdata](docs/images/football-club-data-platform-overview.png)
